@@ -91,7 +91,10 @@
             y = p.o[1] + p.v[1] * drag / 2.2 - 0.5 * g * t * t * 0.4;
           }
           n.pos[0] = x * k; n.pos[1] = y * k; n.pos[2] = z * k;
-          if (p.spin) { const ts = landed ? tl : t; n.rot[0] = p.spin[0] * ts; n.rot[1] = p.spin[1] * ts; n.rot[2] = p.spin[2] * ts; }
+          if (p.spin) {
+            if (landed && K.land === 'rest') { n.rot[0] = 0; n.rot[1] = p.spin[1] * tl; n.rot[2] = 0; } // settle flat, no corners through the floor
+            else { n.rot[0] = p.spin[0] * t; n.rot[1] = p.spin[1] * t; n.rot[2] = p.spin[2] * t; }
+          }
           if (p.stages) {
             const u = clamp01(t / p.life), si = Math.min(p.stages.length - 1, Math.floor(u * p.stages.length));
             p.stages[si].hidden = false;
