@@ -38,10 +38,16 @@ Implemented as `sdStyle: 'frame'` in `js/sdmechs.js` (the "Mech frame" line). It
 - **Idle:** the stance described above, plus subtle breathing and a slow weight shift.
 - **Walk:** a real walk, not a waddle. Legs travel straight under the hips with no A-frame splay or sideways swing. Heel strike, passing pose and push-off, with the knee lifting forward. Minimal side-to-side sway and hip roll, arms counter-swinging, and a stable torso and head. The idle stance blends out as the walk starts.
 - **Attack:** the weapon comes up from the relaxed carry, strikes or fires, and returns.
-- Death, hit reactions and run cycles are a later animation pass.
+- **Run:** a separate cycle with a flight phase. Heavier roles are more ponderous.
+- **Hit:** directional. Humans flinch with a blood spurt; mechs stagger with sparks and smoke.
+- **Deaths:** gruesome, StarCraft II-style.
+  - Humans: collapse (bleed out), dismember (the head is severed, with a blood fountain) and gib (burst into chunks with a wide pool).
+  - Mechs: explode (parts blown off, burning wreck), collapse (crash onto the chest) and meltdown (the core overheats, then a massive blast).
+  - Modular chassis: explode and collapse.
+- **Extras:** reload (guns and pods), aim (kneel and brace for rifles) and block (shields, weapon parries).
 
 ## Roll-out order
 1. Fix the human walk cycle (done: foot-path IK walk, stance blends out, no splay or wobble).
-2. Apply the locked rules to the remaining human roles: sniper, knight, heavy.
-3. Apply Military frame to all mech archetypes.
-4. Restyle the Modular line to the frame rules. It is not being retired.
+2. Apply the locked rules to the remaining human roles: sniper, knight, heavy (done).
+3. Apply Military frame to all mech archetypes (done).
+4. Restyle the Modular line to the frame rules. It is not being retired (done).

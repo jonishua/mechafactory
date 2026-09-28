@@ -990,7 +990,7 @@
             let restD = [s * 0.25, 0.55, 0.8];
             if (!H.sd) { // styled: point down at the side, angled forward just enough to keep the tip off the ground
               const hy = P.hipY + 1.5 + rest[1] - 3 * clamp(st.run || 0, 0, 1), reach = (19 * P.ws + P.fist * 0.5);
-              const vy = clamp((hy - 3) / reach, 0.3, 0.88);
+              const vy = clamp((hy - 4.2) / reach, 0.3, 0.88);
               restD = [s * 0.1, -vy, Math.sqrt(1 - vy * vy)];
             }
             let p = rest, d = restD;
@@ -1029,6 +1029,11 @@
             const P = H.P;
             const rest = H.sd ? [H.sh[s][0] * 1.05, -0.5, P.chest[2] * 0.5 + 1] : [H.hangP[s][0] + s * 0.2, H.hangP[s][1] + 0.6, H.hangP[s][2] + 1];
             let p = rest, d = H.sd ? [s * 0.1, -0.8, 0.6] : [s * 0.05, -0.9, 0.3];
+            if (!H.sd) { // styled: hangs muzzle-down, tipped forward just enough that short-legged builds keep it off the floor
+              const hy = P.hipY + 1.5 + rest[1] - 3 * clamp(st.run || 0, 0, 1), reach = 12 * P.ws + P.fist * 0.5;
+              const vy = Math.min(0.947, clamp((hy - 3.5) / reach, 0.3, 1));
+              if (vy < 0.947) d = [s * 0.05, -vy, Math.sqrt(1 - vy * vy)];
+            }
             if (f > 0) {
               const u = 1 - f, up = ease(seg(u, 0, 0.12)) * (1 - ease(seg(u, 0.75, 1)));
               const aimP = [H.sh[s][0] * 0.55, H.sh[s][1] - 1, P.U + P.F * 0.9];
@@ -1636,35 +1641,45 @@
     H.blocker = keys.includes('shield') ? 'shield' : ['greatsword', 'sword', 'dagger'].find((q) => keys.includes(q)) || null;
     Object.assign(info.dur, { hit: 0.45, death: 3.2, reload: 1.4, aim: 2.0, block: 1.2 });
     const R = H.R = { chestY, neckY };
+    // Effects are built lazily, the first time a hit or a death needs them (fixed seeds, so every frame is still a
+    // pure function of the state); an idle rig carries none of their particle nodes.
+    const lazy = (parent, make) => { let v = null; return () => {
+      if (v) return v;
+      const before = parent.children.length, K = MF.getBuildScale();
+      MF.setBuildScale(k);
+      try { v = make(); } finally { MF.setBuildScale(K); }
+      for (let i = before; i < parent.children.length; i++) parent.children[i].reset(); // start hidden
+      return v;
+    }; };
     // hit: a spurt on a pivot that turns to face the hit
     R.hitPivot = root.child('fx_hitPivot');
-    R.hit = FX.hitBlood(R.hitPivot, { name: 'hb', origin: [0, chestY, D * 0.5 + 1], dir: [0, 0.35, 1], seed: 5 });
+    R.hit = lazy(R.hitPivot, () => FX.hitBlood(R.hitPivot, { name: 'hb', origin: [0, chestY, D * 0.5 + 1], dir: [0, 0.35, 1], seed: 5 }));
     // deaths
     R.fx = {
-      collapse: FX.group([
+      collapse: lazy(root, () => FX.group([
         FX.bloodBurst(root, { name: 'dcA', origin: [0, chestY, 0], dir: [0, 0.45, -1], seed: 11, scale: 1.4, pool: false }),
         FX.burst(root, 'dcM', { kind: 'mist', count: 10, origin: [0, chestY, 1], dir: [0, 0.3, 1], spread: 0.5, seed: 13 }),
         FX.burst(root, 'dcC', { kind: 'blood', count: 14, origin: [0, chestY, -1], dir: [0, 0.5, -1], spread: 0.7, seed: 14, size: [1.4, 2.4] }), // chunky exit wound
         FX.bloodBurst(root, { name: 'dcB', origin: [0, 4, 0], dir: [0, 0.8, 0], seed: 12, start: 1.1, scale: 0.8, pool: false }),
-      ]),
-      dismember: FX.group([
+      ])),
+      dismember: lazy(root, () => FX.group([
         FX.bloodBurst(root, { name: 'ddA', origin: [0, neckY, 0], dir: [0, 1, 0.1], seed: 21, scale: 1.4, start: 0.08, pool: false }),
         FX.bloodBurst(root, { name: 'ddB', origin: [0, neckY, 0], dir: [0.15, 1, -0.15], seed: 22, scale: 1.1, start: 0.45, pool: false }),
         FX.burst(root, 'ddK', { kind: 'blood', count: 16, origin: [0, neckY, 0], dir: [0, 1, 0], spread: 0.6, seed: 24, start: 0.1, stagger: 0.5, size: [1.4, 2.4] }), // pumping fountain
         FX.bloodBurst(root, { name: 'ddC', origin: [0, 4, 0], dir: [0, 0.8, 0], seed: 23, start: 1.35, scale: 0.7, pool: false }),
-      ]),
-      gib: FX.group([ // blown apart: armour and flesh chunks, a red mist, a flash of fire and smoke, a wide pool
+      ])),
+      gib: lazy(root, () => FX.group([ // blown apart: armour and flesh chunks, a red mist, a flash of fire and smoke, a wide pool
         FX.burst(root, 'dgL', { kind: 'flash', count: 1, origin: [0, chestY * 0.8, 0], dir: [0, 1, 0], spread: 0, seed: 30, start: 0.02, stagger: 0, scale: 0.7 }),
         FX.gibs(root, { name: 'dg', origin: [0, chestY * 0.8, 0], seed: 31, scale: 1.5, count: 16, mats: ['primary', 'metal', 'skin', 'leather'], start: 0.02 }),
         FX.burst(root, 'dgA', { kind: 'debris', count: 10, start: 0.02, origin: [0, chestY, 0], dir: [0, 1, 0], spread: 1.3, mats: ['metal', 'primary', 'secondary'], seed: 32 }),
         FX.burst(root, 'dgF', { kind: 'fire', count: 5, origin: [0, chestY * 0.8, 0], dir: [0, 0.6, 0], spread: 1.1, seed: 33, scale: 0.6 }),
         FX.burst(root, 'dgS', { kind: 'smoke', count: 5, origin: [0, chestY * 0.8, 0], dir: [0, 1, 0], spread: 0.8, seed: 34, start: 0.1, stagger: 0.4, scale: 0.7 }),
         FX.burst(root, 'dgM', { kind: 'mist', count: 24, origin: [0, chestY * 0.8, 0], dir: [0, 0.5, 0], spread: 1.2, seed: 35, start: 0.02, scale: 1.5 }),
-      ]),
+      ])),
     };
     // blood pools under where the chest comes to rest (forward or backward fall)
-    R.pool = { 1: FX.pool(root, 'dpF', { origin: [0, 0, Ht * 0.75], radius: 15, seed: 3, start: 0.9, grow: 2.2, blobs: 7 }),
-      [-1]: FX.pool(root, 'dpB', { origin: [0, 0, -Ht * 0.75], radius: 15, seed: 4, start: 0.9, grow: 2.2, blobs: 7 }) };
+    R.pool = { 1: lazy(root, () => FX.pool(root, 'dpF', { origin: [0, 0, Ht * 0.75], radius: 15, seed: 3, start: 0.9, grow: 2.2, blobs: 7 })),
+      [-1]: lazy(root, () => FX.pool(root, 'dpB', { origin: [0, 0, -Ht * 0.75], radius: 15, seed: 4, start: 0.9, grow: 2.2, blobs: 7 })) };
     // a severed-head prop (a copy of the head) and a dropped copy of each weapon
     R.sev = root.child('sevRoot'); R.sev.startHidden = true;
     const hn = buildHead(ctx, H, R.sev);
@@ -1689,6 +1704,7 @@
     const nodes = MF.findNodes(root);
     const anim = ctx.anims[ctx.anims.length - 1];
     const pose = (st) => { root.reset(); anim(Object.assign({}, IDLE_ST, st), nodes); return MF.updateRig(root, MF.mat(), []); };
+    H.calibrating = true; // measuring poses must not build the (lazy) effects
     pose({});
     for (const s in R.drop) { const g = nodes['grip' + s].world; R.drop[s].start = { p: [g[9], g[10], g[11]], rot: toEuler(g) }; }
     const hw = nodes.head.world; R.neck = { p: [hw[9], hw[10], hw[11]], rot: toEuler(hw) };
@@ -1706,6 +1722,7 @@
     };
     for (const s in R.drop) R.drop[s].restY = restY(R.drop[s].node, R.drop[s].fin);
     R.sevRest = restY(R.sev, R.sevFin);
+    H.calibrating = false;
     root.reset();
   }
 
@@ -1741,7 +1758,7 @@
     if (st.death != null && st.death >= 0) {
       const t = st.death, type = DEATHS.includes(st.deathType) ? st.deathType : 'collapse';
       const dir = type === 'gib' ? 1 : (st.deathSeed | 0) % 2 ? 1 : -1;
-      R.fx[type].update(t);
+      if (!H.calibrating) R.fx[type]().update(t);
       if (type === 'gib') { // blown apart a beat after the flash; the weapon is flung clear
         if (t >= 0.04) n.pelvis.hidden = true;
         for (const s in R.drop) if (t >= 0.04) { n['grip' + s].hidden = true; dropProp(R.drop[s], t - 0.04, [s * 18, 34, 8], [9, 7, 5], k); }
@@ -1753,7 +1770,7 @@
       n.pelvis.pos[2] += dir * P.chest[1] * 0.3 * k * fall;
       n.pelvis.pos[1] += ((R.settle[type + dir] || 0) + bounce * k) * fall;
       if (n.head) { n.head.rot[0] += dir * 0.35 * fall; n.head.rot[2] += 0.25 * fall; }
-      R.pool[dir].update(t);
+      if (!H.calibrating) R.pool[dir]().update(t);
       for (const s in R.drop) if (t >= T.r) { n['grip' + s].hidden = true; dropProp(R.drop[s], t - T.r, [s * 7, 5, dir * 6], null, k); }
       if (type === 'dismember' && t >= 0.08) { // the head comes off and flies, spinning, then rolls to a stop
         n.head.hidden = true;
@@ -1774,7 +1791,7 @@
       if (n.head) n.head.rot[2] += sx * 0.3 * e2;
       n.pelvis.pos[0] -= sx * 1.2 * e * k; n.pelvis.pos[2] -= sz * 1.2 * e * k; // a small step back
       R.hitPivot.rot[1] = th;
-      R.hit.update(st.hit);
+      R.hit().update(st.hit);
     }
   }
   // a dropped weapon: tumbles from where the hand held it and comes to rest flat on the floor
