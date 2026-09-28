@@ -86,6 +86,16 @@
     return mz;
   };
   const GLOW = { mat: 'accent', shadow: false };
+  // extra 'reload': the magazine drops out along the gun's local -y, vanishes, then a fresh one slides in
+  const reloadEnv = (st) => { const a = st.act; if (!a || a.name !== 'reload' || st.death != null || !(a.t >= 0) || a.t > 1.3) return 0; return smooth(a.t / 0.25) * smooth((1.3 - a.t) / 0.3); };
+  const magReload = (ctx, id) => ctx.anims.push((st, n) => {
+    const a = st.act, mg = n[id + 'mag'];
+    if (!mg || !a || a.name !== 'reload' || st.death != null) return;
+    const t = a.t;
+    if (t > 0.3 && t < 0.62) { const u = t - 0.3; mg.pos[1] -= (1.5 + 90 * u * u) * ctx.k; mg.rot[0] += u * 3; }
+    else if (t >= 0.62 && t < 0.85) mg.hidden = true;
+    else if (t >= 0.85 && t < 1.05) mg.pos[1] -= ((1.05 - t) / 0.2) * 6 * ctx.k;
+  });
 
   // ------------------------------------------------------------------ weapons
   // pose: rest pose of the arm holding it (see POSES). attack: armMotion kind.
@@ -104,6 +114,8 @@
         body.cyl('z', 1.1, 7, { at: [0, 2.2, 11.5], mat: 'metal', sides: 6 });
         body.box(2.4, 3.4, 3, { at: [0, 1.4, -3.4], mat: 'metal', bevel: 0.4 }); // stock
         body.box(1.6, 3, 1.8, { at: [0, -1.5, 6.5], mat: 'metal' }); // foregrip
+        body.child(id + 'mag', [0, -1.3, 2.2]).box(2.4, 3.2, 3, { mat: 'secondary', bevel: 0.3 }); // e-cap
+        magReload(ctx, id);
         flash(body, id + 'mz', [0, 2.2, 15.2], 'beam');
         ctx.anims.push((st, n) => {
           const f = fireOf(st, o);
@@ -120,7 +132,8 @@
         const id = o.id;
         const body = g.child(id + 'slide');
         body.box(3, 4, 9, { at: [0, 1.5, 2.5], mat: 'metal', bevel: 0.5, detail: { type: 'vent', face: 'side', pitch: 1.2, inset: 0.8 } });
-        body.cyl('x', 3, 2.2, { at: [s * 2.2, 1.2, 1.5], mat: 'secondary', sides: 8, detail: { type: 'bolts', face: 'side', inset: 1.4 } }); // drum magazine
+        body.child(id + 'mag', [s * 2.2, 1.2, 1.5]).cyl('x', 3, 2.2, { mat: 'secondary', sides: 8, detail: { type: 'bolts', face: 'side', inset: 1.4 } }); // drum magazine
+        magReload(ctx, id);
         body.cyl('z', 0.9, 7, { at: [0, 2.2, 10], mat: 'metal', sides: 6 });
         body.box(2, 2, 2.4, { at: [0, 2.2, 13.2], mat: 'metal' }); // muzzle brake
         body.box(1, 2.6, 1, { at: [0, 4.6, 5], mat: 'metal' }); // sight
@@ -145,6 +158,8 @@
         body.cone('z', 3.2, 2.4, 2.5, { at: [0, 0, -8.2], mat: 'metal', sides: 8, twist: PI / 8 });
         body.box(2.4, 3, 5, { at: [-s * 3.2, 1.2, 4], mat: 'primary', bevel: 0.5 }); // scope
         body.box(1.6, 4.5, 2, { at: [0, -3.4, 1], mat: 'metal' }); // grip
+        body.child(id + 'mag', [0, -2.8, -4.5]).box(2.4, 3.4, 3.4, { mat: 'primary', bevel: 0.4 });
+        magReload(ctx, id);
         flash(body, id + 'mz', [0, 0, 16.5], 'puff');
         ctx.anims.push((st, n) => {
           const f = fireOf(st, o);
@@ -160,7 +175,8 @@
       build(ctx, g, s, o) {
         const id = o.id;
         g.box(5, 5.5, 8, { at: [0, 1.5, 2.5], mat: 'primary', bevel: 0.8, detail: { type: 'vent', face: 'side', pitch: 1.5, inset: 1 } });
-        g.cyl('y', 2.4, 5, { at: [0, -2.5, 1], mat: 'secondary', sides: 8, detail: { type: 'band', at: 0, size: 0.6, mat2: 'tertiary' } }); // ammo drum under
+        g.child(id + 'mag', [0, -2.5, 1]).cyl('y', 2.4, 5, { mat: 'secondary', sides: 8, detail: { type: 'band', at: 0, size: 0.6, mat2: 'tertiary' } }); // ammo drum under
+        magReload(ctx, id);
         const spin = g.child(id + 'spin', [0, 1.5, 7]);
         for (let i = 0; i < 4; i++) {
           const a = (i / 4) * PI * 2 + PI / 4;
@@ -189,6 +205,8 @@
         body.box(1.8, 1.8, 0.8, { at: [0, 5.3, 6.8], mat: 'glass', shadow: false });
         body.box(2.4, 3.6, 5, { at: [0, 1, -6], mat: 'secondary', bevel: 0.5 }); // stock
         body.box(2, 2, 4, { at: [0, -1.4, 10], mat: 'metal' }); // foregrip
+        body.child(id + 'mag', [0, -1.4, 3]).box(2, 4, 3, { mat: 'metal', bevel: 0.3 });
+        magReload(ctx, id);
         flash(body, id + 'mz', [0, 2, 32.8], 'beam');
         ctx.anims.push((st, n) => {
           const f = fireOf(st, o);
@@ -360,6 +378,8 @@
         body.cyl('z', 2, 14, { at: [0, 2.5, 17], mat: 'metal', sides: 8, twist: PI / 8 });
         body.box(4.4, 4.4, 3.6, { at: [0, 2.5, 24.5], mat: 'secondary', bevel: 0.6, detail: { type: 'vent', face: 'side', pitch: 1.1, inset: 0.6 } });
         for (const [x, y] of [[-1.4, -3], [1.4, -3], [0, -5.2]]) body.cyl('z', 1.2, 10, { at: [x, y, 6.5], mat: 'secondary', sides: 6 });
+        body.child(id + 'mag', [s * 3.3, 1.2, 1]).box(1.6, 4.5, 6, { mat: 'secondary', bevel: 0.3, detail: { type: 'bolts', face: 'side', inset: 1 } });
+        magReload(ctx, id);
         flash(body, id + 'mz', [0, 2.5, 26.5], 'flash');
         flash(body, id + 'mz2', [0, -3.8, 12.2], 'puff');
         ctx.anims.push((st, n) => {
@@ -389,7 +409,7 @@
         ctx.anims.push((st, n) => {
           const f = fireOf(st, o);
           // folds the barrel up while marching, snaps level to fire
-          n[id + 'gun'].rot[0] -= 0.75 * st.move * (1 - Math.min(1, f * 3));
+          n[id + 'gun'].rot[0] -= 0.75 * st.move * (1 - Math.min(1, f * 3)) + 0.6 * reloadEnv(st); // reload: breech tips up
           n[id + 'mz'].hidden = !(f > 0.55);
           n[id + 'slide'].pos[2] -= f * 3.5 * ctx.k;
           n[id + 'gun'].pos[2] -= f * 1 * ctx.k;
@@ -410,7 +430,7 @@
         ctx.anims.push((st, n) => {
           const f = fireOf(st, o);
           n[id + 'mz'].hidden = !(f > 0.5);
-          n[id + 'pod'].rot[0] -= f * 0.12;
+          n[id + 'pod'].rot[0] -= f * 0.12 + 0.55 * reloadEnv(st); // reload: pod tilts up to take a fresh rack
         });
       },
     },
@@ -433,7 +453,7 @@
         }
         ctx.anims.push((st, n) => {
           const f = fireOf(st, o);
-          n[id + 'lid'].rot[0] = -1.9 * Math.min(1, f * 3);
+          n[id + 'lid'].rot[0] = -1.9 * Math.max(Math.min(1, f * 3), reloadEnv(st)); // hatch cycles on reload
           for (let i = 0; i < 2; i++) {
             const u = Math.max(0, Math.min(1, (1 - f) * 1.6 - i * 0.35));
             const ms = n[id + 'ms' + i];
@@ -462,7 +482,7 @@
         ctx.anims.push((st, n) => {
           const f = fireOf(st, o);
           n[id + 'mz'].hidden = !(f > 0.5);
-          n[id + 'slide'].pos[2] -= f * 2 * ctx.k;
+          n[id + 'slide'].pos[2] -= (f * 2 + 4 * reloadEnv(st)) * ctx.k;
         });
       },
     },
@@ -569,11 +589,11 @@
   // extra weights mixed in when the style is 'frame' (asymmetric kit loadouts)
   const FRAME_LOADOUT = {
     hero: { L: { plateShield: 7 }, back: { antenna: 4, container: 1 } },
-    commander: { R: { armCannon: 3 }, L: { plateShield: 3 }, back: { container: 4 } },
+    commander: { R: { armCannon: 3 }, L: { plateShield: 3 }, back: { antenna: 6, container: 1 } },
     heavy: { R: { armCannon: 5 }, L: { plateShield: 3 }, back: { container: 5 } },
     knight: { R: { sabre: 2 }, L: { towerShield: 2, plateShield: 3 } },
     sniper: { back: { antenna: 5 } },
-    brawler: { back: { container: 3 } },
+    brawler: { back: { thrusters: 5, none: 2 } },
     ace: { back: { antenna: 2 } },
     corsair: {},
   };
@@ -755,7 +775,7 @@
           a.rot[0] += d.sh * w; a.rot[1] += d.ry * w; a.rot[2] += d.rz * w; b2.rot[0] += d.el * w; c.rot[0] += d.wr * w;
         });
       }
-      arms[s] = { swing: support ? 0.04 : W.pose === 'fist' ? 0.5 : W.pose === 'blade' ? 0.3 : 0.12 };
+      arms[s] = { swing: support ? 0.04 : W.pose === 'fist' ? 0.5 : W.pose === 'blade' ? 0.3 : 0.12, rest, pose, W, wt, support, free: support || W.pose === 'fist' || W.pose === 'blade' };
     }
     ctx.fireDecay = WEAPONS[wR].melee || WEAPONS[wL].melee ? 2.2 : 5;
 
@@ -782,67 +802,101 @@
     ctx.gait = 'biped';
     ctx.anims.push((st, n) => {
       const m = st.move || 0, ph = st.phase || 0, t = st.t || 0;
-      const drop = Lleg * (1 - Math.cos(Aw * m * Math.sin(ph)));
-      const stomp = m * 1.1 * Math.pow(Math.max(0, -Math.cos(2 * ph)), 6); // heavy footfall dip
+      const rn = st.death == null ? Math.min(1, st.run || 0) * Math.min(1, m) : 0; // run: longer, heavier, leaning gait
+      const A2 = Aw * (1 + 0.25 * rn);
+      const drop = Lleg * (1 - Math.cos(A2 * m * Math.sin(ph)));
+      const stomp = m * (1.1 + 1.3 * rn) * Math.pow(Math.max(0, -Math.cos(2 * ph)), 6); // heavy footfall dip
       const breathe = relaxed ? 0 : Math.sin(t * 2.2) * 0.35 * (1 - m); // relaxed styles breathe in the stance IK
       n.pelvis.pos[1] -= (drop + stomp + breathe) * k;
       n.pelvis.rot[1] += Math.sin(ph) * 0.08 * m;
       let hmin = 0, hmax = 0;
       for (const s of [-1, 1]) {
         const p = s < 0 ? ph : ph + PI;
-        const hip = -Aw * Math.sin(p) * m;
-        const knee = Math.max(0, Math.cos(p)) * 1.05 * m;
+        const hip = -A2 * Math.sin(p) * m;
+        const knee = Math.max(0, Math.cos(p)) * (1.05 + 0.5 * rn) * m;
         n['hip' + s].rot[0] += hip;
         n['knee' + s].rot[0] += knee;
         n['ankle' + s].rot[0] += -(hip + knee) * 0.92;
         n['skF' + s].rot[0] += Math.min(0, hip - knee * 0.4) * 0.8;
         hmin = Math.min(hmin, hip - knee * 0.35); hmax = Math.max(hmax, hip);
-        const sw = -s * Math.sin(ph) * arms[s].swing * m;
+        const sw = -s * Math.sin(ph) * (arms[s].swing + (arms[s].free ? 0.4 : 0.08) * rn) * m;
         n['sh' + s].rot[0] += sw;
+        if (arms[s].free) n['el' + s].rot[0] -= 0.75 * rn; // pumping arms
         n['sh' + s].rot[2] += s * (Math.sin(t * 2.2) * 0.025 * (1 - m) + stomp * 0.04);
         n['pad' + s].rot[0] += sw * 0.4;
         n['pad' + s].rot[2] -= s * stomp * 0.05;
       }
       if (n.tabF) { n.tabF.rot[0] += hmin * 0.9 + Math.sin(t * 1.9) * 0.02; n.tabB.rot[0] += hmax * 0.6 + 0.12 * m + Math.sin(t * 1.9 + 1) * 0.03; }
       n.torso.rot[1] += -Math.sin(ph) * 0.18 * m;
-      n.torso.rot[0] += (relaxed ? 0.03 : 0.07) * m + stomp * 0.03;
+      n.torso.rot[0] += (relaxed ? 0.03 : 0.07) * m + stomp * 0.03 + 0.17 * rn;
+      n.head.rot[0] -= 0.14 * rn;
       n.torso.rot[2] += Math.sin(ph) * 0.035 * m;
       n.torso.pos[1] += Math.sin(t * 2.2 + 0.6) * 0.25 * (1 - m) * k;
       n.head.rot[1] += Math.sin(t * 0.7) * (relaxed ? 0.22 : 0.32) * (1 - m) + Math.sin(ph) * 0.12 * m;
       if (!relaxed) n.head.rot[0] += Math.sin(t * 0.45) * 0.05 * (1 - m) - stomp * 0.05; // heroic heads stay level
     });
-    if (relaxed) addStance(ctx, { thigh, shin, type, sF: WEAPONS[wR].shield && !WEAPONS[wL].shield ? -1 : 1 });
+    const sF = WEAPONS[wR].shield && !WEAPONS[wL].shield ? -1 : 1;
+    const reactInfo = setupInfo(ctx, { wR, wL, type, mounts: [bp.sdBackR, bp.sdBackL] });
+    addStance(ctx, { thigh, shin, type, sF, pose: relaxed ? 1 : 0 });
+    addReactions(ctx, { arms, type, sF, chestY, cW, cH, cD, R, Lf, relaxed, reactInfo });
   }
 
   // Contrapposto idle for 'heroic' / 'frame': one foot a little forward, the other back, hips yawed toward
   // the front foot, rolled and shifted onto the straighter back leg, torso counter-twisted, shoulders off
   // level, arms asymmetric, plus a slow weight shift and breath. Both feet stay exactly planted and flat:
   // a 2-bone IK re-solves each leg against the final pelvis transform (so attack lunges don't slide the
-  // feet either). Everything blends out as st.move rises so the walk starts cleanly. Pushed last.
+  // feet either). The same IK carries the hit step-back, the block crouch and the one-knee 'aim' kneel,
+  // for every style ('sd' gets no contrapposto: o.pose = 0). Blends out as st.move rises.
+  const actEnv = (a, name, dur, tin, tout) => {
+    if (!a || a.name !== name || !(a.t >= 0) || a.t > dur) return 0;
+    return smooth(a.t / tin) * smooth((dur - a.t) / tout);
+  };
+  const hitEnv = (st, dur) => {
+    if (st.hit == null || st.death != null || !(st.hit >= 0) || st.hit > dur) return 0;
+    const u = st.hit / dur;
+    return u < 0.22 ? smooth(u / 0.22) : 1 - smooth((u - 0.22) / 0.78);
+  };
   function addStance(ctx, o) {
-    const k = ctx.k, sF = o.sF, T = o.thigh * k, S = o.shin * k;
+    const k = ctx.k, sF = o.sF, T = o.thigh * k, S = o.shin * k, P = o.pose, dur = ctx.info.dur;
     MF.updateRig(ctx.root, MF.mat(), []);
     const N = MF.findNodes(ctx.root);
     const rest = {};
     for (const s of [-1, 1]) { const a = N['ankle' + s].world; rest[s] = { hip: N['hipS' + s].pos.slice(), ank: [a[9], a[10], a[11]] }; }
+    const hipY0 = N.pelvis.pos[1] + rest[1].hip[1];
+    const kneelDrop = Math.max(0, hipY0 - (T + 2.6 * k)); // back knee on the floor, thigh vertical
     const brace = o.type === 'brawler' || o.type === 'heavy' ? 1.25 : 1;
     const M = MF.mat();
     ctx.anims.push((st, n) => {
+      if (st.death != null) return;
       const m = Math.min(1, st.move || 0), t = st.t || 0;
       const w = (1 - m) * (1 - m);
-      if (!(w > 0)) return;
-      const shift = Math.sin(t * 0.45), breath = 0.5 + 0.5 * Math.sin(t * 1.3);
-      const psi = -sF * 0.14 * w, rho = -sF * (0.05 + 0.012 * shift) * w;
-      const pel = n.pelvis;
-      pel.pos[0] += -sF * (0.9 + 0.35 * shift) * w * k; // weight onto the back leg
-      pel.pos[1] -= (1.0 * brace + 0.4 * breath) * w * k;
-      pel.pos[2] -= 0.4 * w * k;
+      const he = hitEnv(st, dur.hit), aimK = actEnv(st.act, 'aim', dur.aim, 0.35, 0.4), blk = actEnv(st.act, 'block', dur.block, 0.15, 0.3);
+      const pw = P * w; // contrapposto amount
+      if (!(w > 0) || (pw === 0 && he === 0 && aimK === 0 && blk === 0)) return;
+      const shift = Math.sin(t * 0.45) * P, breath = (0.5 + 0.5 * Math.sin(t * 1.3)) * P;
+      const psi = -sF * (0.14 * pw + 0.1 * aimK * w), rho = -sF * (0.05 + 0.012 * shift) * pw;
+      const pel = n.pelvis, ha = st.hitDir || 0;
+      pel.pos[0] += (-sF * (0.9 + 0.35 * shift) * pw - Math.sin(ha) * 3.5 * he * w) * k; // weight onto the back leg; pushed away from the hit
+      pel.pos[1] -= ((1.0 * brace + 0.4 * breath) * pw + 0.6 * he + 1.8 * blk) * w * k + kneelDrop * aimK * w;
+      pel.pos[2] -= (0.4 * pw + Math.cos(ha) * 3.5 * he + 0.8 * blk) * w * k;
       pel.rot[1] += psi; pel.rot[2] += rho;
-      MF.matFromEuler(M, pel.pos[0], pel.pos[1], pel.pos[2], pel.rot[0], pel.rot[1], pel.rot[2]);
-      for (const s of [-1, 1]) {
-        const h = rest[s].hip, A = rest[s].ank;
+      const legTarget = (s) => {
+        const h = rest[s].hip, A = rest[s].ank, front = s === sF;
         const hx = M[0] * h[0] + M[1] * h[1] + M[2] * h[2] + M[9], hy = M[3] * h[0] + M[4] * h[1] + M[5] * h[2] + M[10], hz = M[6] * h[0] + M[7] * h[1] + M[8] * h[2] + M[11];
-        const wx = A[0] - hx, wy = A[1] - hy, wz = A[2] + (s === sF ? 7 : -5.5) * w * k - hz;
+        const dz = front ? 7 * pw + 3 * blk * w + 6 * aimK * w : -5.5 * pw - 3 * blk * w;
+        return [A[0] - hx, A[1] - hy, A[2] + dz * k - hz];
+      };
+      MF.matFromEuler(M, pel.pos[0], pel.pos[1], pel.pos[2], pel.rot[0], pel.rot[1], pel.rot[2]);
+      { // never over-reach: sink the pelvis until both planted feet are within reach (lunges, recoil, wide stances)
+        let need = 0; const Lm = (T + S) * 0.999;
+        for (const s of [-1, 1]) { const v = legTarget(s); need = Math.max(need, -Math.sqrt(Math.max(0, Lm * Lm - v[0] * v[0] - v[2] * v[2])) - v[1]); }
+        if (need > 0) { pel.pos[1] -= need; MF.matFromEuler(M, pel.pos[0], pel.pos[1], pel.pos[2], pel.rot[0], pel.rot[1], pel.rot[2]); }
+      }
+      for (const s of [-1, 1]) {
+        const h = rest[s].hip, A = rest[s].ank, front = s === sF;
+        const hx = M[0] * h[0] + M[1] * h[1] + M[2] * h[2] + M[9], hy = M[3] * h[0] + M[4] * h[1] + M[5] * h[2] + M[10], hz = M[6] * h[0] + M[7] * h[1] + M[8] * h[2] + M[11];
+        const dz = front ? 7 * pw + 3 * blk * w + 6 * aimK * w : -5.5 * pw - 3 * blk * w;
+        const wx = A[0] - hx, wy = A[1] - hy, wz = A[2] + dz * k - hz;
         // into the pelvis frame (transpose of the rotation)
         const vx = M[0] * wx + M[3] * wy + M[6] * wz, vy = M[1] * wx + M[4] * wy + M[7] * wz, vz = M[2] * wx + M[5] * wy + M[8] * wz;
         const th = Math.atan2(vx, -vy), r = Math.hypot(vx, vy);
@@ -852,14 +906,301 @@
         const bl = (node, i, v) => { node.rot[i] += (v - node.rot[i]) * w; };
         bl(n['hipS' + s], 2, th); bl(n['hip' + s], 0, al); bl(n['knee' + s], 0, be);
         bl(n['ankle' + s], 0, -(al + be)); bl(n['foot' + s], 2, -(pel.rot[2] + th));
+        if (!front && aimK > 0) { // aim: back knee down on the floor, shin flat behind, toes planted
+          const kb = aimK * w, pr = pel.rot[0];
+          n['hip' + s].rot[0] += (-pr + 0.05 - n['hip' + s].rot[0]) * kb;
+          n['knee' + s].rot[0] += (1.5 - n['knee' + s].rot[0]) * kb;
+          n['ankle' + s].rot[0] += (-0.55 - n['ankle' + s].rot[0]) * kb;
+        }
       }
       // upper body: counter-twist, shoulders off level, head kept level and roughly forward
-      n.torso.rot[1] -= psi * 1.4; n.torso.rot[2] -= rho * 1.6; n.torso.rot[0] += 0.02 * shift * w;
-      const glance = Math.pow(Math.max(0, Math.sin(t * 0.21 + 1)), 12) * 0.35 * sF;
-      n.head.rot[1] += (psi * 0.4 + glance) * w; n.head.rot[2] += rho * 0.6;
+      n.torso.rot[1] -= psi * 1.4; n.torso.rot[2] -= rho * 1.6; n.torso.rot[0] += (0.02 * shift * pw) + (0.12 * aimK + 0.1 * blk) * w;
+      const glance = Math.pow(Math.max(0, Math.sin(t * 0.21 + 1)), 12) * 0.35 * sF * P;
+      n.head.rot[1] += (psi * 0.4 + glance) * w; n.head.rot[2] += rho * 0.6; n.head.rot[0] -= (0.1 * aimK + 0.08 * blk) * w;
       // arms asymmetric: the arm on the front-foot side sits back, the other a touch forward and more bent
-      n['sh' + sF].rot[0] += 0.09 * w; n['sh' + sF].rot[2] += sF * 0.03 * w;
-      n['sh' + -sF].rot[0] -= 0.07 * w; n['el' + -sF].rot[0] -= 0.12 * w;
+      n['sh' + sF].rot[0] += 0.09 * pw; n['sh' + sF].rot[2] += sF * 0.03 * pw;
+      n['sh' + -sF].rot[0] -= 0.07 * pw; n['el' + -sF].rot[0] -= 0.12 * pw;
+    });
+  }
+
+  // ------------------------------------------------------------------ reactions: hit, deaths, extras
+  const GUNS = new Set(['shoot', 'heavy', 'spray']);
+  function setupInfo(ctx, o) {
+    const info = ctx.info, W = WEAPONS;
+    Object.assign(info.dur, { hit: 0.5, death: 3, reload: 1.3, aim: 1.6, block: 1.1 });
+    info.customHit = true;
+    info.deaths.length = 0; info.deaths.push('explode', 'collapse', 'meltdown');
+    info.extras.length = 0;
+    const hands = [o.wR, o.wL].map((w) => W[w]);
+    const gunHand = hands.some((w) => GUNS.has(w.attack) && !w.melee);
+    const podMount = o.mounts.some((m) => m === 'missilePod' || m === 'homing' || m === 'rocket' || m === 'cannon');
+    if (gunHand || podMount) info.extras.push('reload');
+    if (o.type === 'sniper' || o.wR === 'longRifle' || o.wL === 'longRifle') info.extras.push('aim');
+    if (hands.some((w) => w.shield || w.melee)) info.extras.push('block');
+    return { gunHand };
+  }
+
+  // pages that don't load js/fx.js still build (effects become no-ops)
+  const NOFX = { group: () => ({ update() {} }), burst: () => ({ update() {} }), explosion: () => ({ update() {} }), hitSparks: () => ({ update() {} }), smokeTrail: () => ({ update() {} }) };
+  function addReactions(ctx, o) {
+    const { root, info, k, bp } = ctx;
+    // Effects are built on first use (deterministic: fixed seeds), so idle units don't carry thousands of hidden
+    // particle nodes that root.reset() would walk every frame.
+    const lazy = (make) => {
+      let g = null;
+      return { update(t) {
+        if (t == null || !(t >= 0)) return;
+        if (!g) {
+          const K0 = MF.getBuildScale ? MF.getBuildScale() : 1, n0 = root.children.length;
+          MF.setBuildScale(k);
+          try { g = make(); } finally { MF.setBuildScale(K0); }
+          for (let i = n0; i < root.children.length; i++) root.children[i].reset(); // start hidden
+        }
+        g.update(t);
+      } };
+    };
+    const dur = info.dur, r = new MF.RNG((bp.seed || 1) * 31 + 7);
+    const N = MF.findNodes(root);
+    const posed = () => MF.updateRig(root, MF.mat(), []);
+    const lowest = (prims) => {
+      let lo = 1e9;
+      for (const p of prims) {
+        if (p.mat === 'fire' || p.mat === 'smoke') continue;
+        const m = p.world;
+        for (let c = 0; c < 8; c++) {
+          const x = c & 1 ? p.hx : -p.hx, y = c & 2 ? p.hy : -p.hy, z = c & 4 ? p.hz : -p.hz;
+          lo = Math.min(lo, m[3] * x + m[4] * y + m[5] * z + m[10]);
+        }
+      }
+      return lo;
+    };
+    root.reset(); posed();
+    const tw = Array.from(N.torso.world);
+    const cy = o.chestY * k;
+    const chest = [(tw[1] * cy + tw[9]) / k, (tw[4] * cy + tw[10]) / k, (tw[7] * cy + tw[11]) / k];
+    const pelY = N.pelvis.world[10] / k;
+
+    // ---------------------------------------------------------------- hit: sparks + smoke on the side it came from, stagger
+    const hfx = [0, 1, 2, 3].map((i) => lazy(() => {
+      const a = i * PI / 2, rr = Math.max(o.cW, o.cD) * 0.45;
+      const org = [chest[0] + Math.sin(a) * rr, chest[1] + 2, chest[2] + Math.cos(a) * rr], dir = [Math.sin(a), 0.45, Math.cos(a)];
+      const FX = MF.FX || NOFX;
+      return FX.group([
+        FX.hitSparks(root, { name: 'sdHit' + i, origin: org, dir, seed: 11 + i }),
+        FX.burst(root, 'sdHitL' + i, { kind: 'flash', count: 1, origin: org, dir: [0, 1, 0], spread: 0, seed: 21 + i, stagger: 0, scale: 0.4 }),
+        FX.burst(root, 'sdHitB' + i, { kind: 'spark', count: 8, origin: org, dir, spread: 0.9, seed: 31 + i, size: [1, 1.6], speed: [30, 60] }),
+      ]);
+    }));
+    ctx.anims.push((st, n) => {
+      const e = hitEnv(st, dur.hit);
+      if (st.hit == null || st.death != null) return;
+      const a = st.hitDir || 0;
+      const i = ((Math.round(a / (PI / 2)) % 4) + 4) % 4;
+      hfx[i].update(st.hit);
+      n.torso.rot[0] += -Math.cos(a) * 0.4 * e; n.torso.rot[2] += Math.sin(a) * 0.3 * e;
+      const e2 = hitEnv({ hit: st.hit - 0.06, death: null }, dur.hit);
+      n.head.rot[0] += -Math.cos(a) * 0.22 * e2; n.head.rot[2] += Math.sin(a) * 0.15 * e2;
+      for (const s of [o.R, o.Lf]) { n['sh' + s].rot[0] += Math.cos(a) * 0.25 * e2; n['sh' + s].rot[2] += s * 0.12 * e2; }
+    });
+
+    // ---------------------------------------------------------------- extras: arm poses (legs are in the stance IK)
+    const gunSide = [o.R, o.Lf].find((s) => GUNS.has(o.arms[s].W.attack) && !o.arms[s].W.melee);
+    const shieldSide = [o.R, o.Lf].find((s) => o.arms[s].W.shield);
+    const bladeSide = [o.R, o.Lf].find((s) => o.arms[s].W.melee);
+    const toPose = (n, s, tgt, wgt, extra) => { // blend the arm from its rest pose toward a target pose
+      const A = o.arms[s], rs = A.rest;
+      n['sh' + s].rot[0] += (tgt.sh - rs.sh + (extra.sh || 0)) * wgt;
+      n['sh' + s].rot[1] += (((tgt.ry || 0) - (rs.ry || 0)) * s + (extra.ry || 0) * s) * wgt;
+      n['sh' + s].rot[2] += s * ((tgt.rz == null ? rs.rz : tgt.rz) - rs.rz) * wgt;
+      n['el' + s].rot[0] += (tgt.el - rs.el + (extra.el || 0)) * wgt;
+      n['wr' + s].rot[0] += ((tgt.wr || 0) - (rs.wr || 0)) * wgt;
+      if (extra.wy) n['wr' + s].rot[1] += extra.wy * s * wgt;
+    };
+    ctx.anims.push((st, n) => {
+      if (st.death != null || !st.act) return;
+      const a = st.act;
+      if (a.name === 'reload' && gunSide != null) {
+        const e = actEnv(a, 'reload', dur.reload, 0.2, 0.25), other = -gunSide;
+        toPose(n, gunSide, POSES.aim, e, { sh: 0.35, ry: -0.35, el: -0.15 }); // weapon brought across the chest
+        n.torso.rot[1] += -gunSide * 0.12 * e;
+        if (!o.arms[other].W.shield) { // free hand: down to the hip for a fresh mag, then up to the gun
+          const f1 = actEnv({ name: 'x', t: a.t - 0.3 }, 'x', 0.4, 0.12, 0.12), f2 = actEnv({ name: 'x', t: a.t - 0.6 }, 'x', 0.55, 0.15, 0.2);
+          n['sh' + other].rot[0] += 0.25 * f1; n['el' + other].rot[0] -= 0.4 * f1;
+          toPose(n, other, POSES.support, f2, {});
+        }
+      } else if (a.name === 'aim') {
+        const e = actEnv(a, 'aim', dur.aim, 0.35, 0.4);
+        if (gunSide != null) toPose(n, gunSide, POSES.aim, e, { sh: -0.05 });
+        if (gunSide != null && o.arms[-gunSide].support) toPose(n, -gunSide, POSES.support, e, {});
+      } else if (a.name === 'block') {
+        const e = actEnv(a, 'block', dur.block, 0.15, 0.3);
+        if (shieldSide != null) toPose(n, shieldSide, POSES.shield, e, { sh: -0.4, ry: -0.35 });
+        else if (bladeSide != null) toPose(n, bladeSide, { sh: -1.15, el: -0.95, ry: -0.35, rz: 0.1, wr: -0.2 }, e, { wy: 1.35 }); // parry guard: blade across the body
+      }
+    });
+
+    // ---------------------------------------------------------------- deaths
+    const g = 150 * k;
+    // parts blown off (torso children), flown in world space; landing heights solved here so nothing sinks
+    const partNames = ['neck', 'pad-1', 'pad1', 'sh-1', 'sh1', 'mt-1', 'mt1', 'pack'].filter((nm) => N[nm]);
+    const Rt = MF.mat(); for (let i = 0; i < 9; i++) Rt[i] = tw[i];
+    const parts = partNames.map((nm, i) => {
+      const node = N[nm], p0 = [node.world[9], node.world[10], node.world[11]];
+      const side = nm.endsWith('-1') ? -1 : nm.endsWith('1') ? 1 : r.chance(0.5) ? 1 : -1;
+      let v;
+      if (nm === 'neck') v = [r.range(-10, 10), r.range(48, 58), r.range(-10, 6)];
+      else if (nm.startsWith('pad')) v = [side * r.range(26, 34), r.range(28, 38), r.range(-8, 8)];
+      else if (nm.startsWith('sh')) v = [side * r.range(18, 26), r.range(22, 32), r.range(-6, 14)];
+      else if (nm.startsWith('mt')) v = [side * r.range(10, 18), r.range(40, 50), r.range(-14, -4)];
+      else v = [r.range(-8, 8), r.range(30, 40), r.range(-26, -18)];
+      return { node, nm, p0, v: v.map((x) => x * k), spin: [r.range(-9, 9), r.range(-6, 6), r.range(-9, 9)], land: null };
+    });
+    const minAt = (node, rot) => {
+      node.reset(); node.pos[0] = node.pos[1] = node.pos[2] = 0; node.rot[0] = rot[0]; node.rot[1] = rot[1]; node.rot[2] = rot[2];
+      const lo = lowest(MF.updateRig(node, Rt, []));
+      node.reset();
+      return lo;
+    };
+    for (const pt of parts) for (const boost of [1, 1.3]) { // explode / meltdown (stronger)
+      const vy = pt.v[1] * boost;
+      let h = 3 * k, tl = 0.5, rot = [0, 0, 0];
+      for (let it = 0; it < 4; it++) {
+        tl = (vy + Math.sqrt(vy * vy + 2 * g * Math.max(0, pt.p0[1] - h))) / g;
+        rot = pt.spin.map((x) => x * tl);
+        h = Math.max(0.3 * k, -minAt(pt.node, rot));
+      }
+      (pt.land || (pt.land = {}))[boost] = { tl, rot, h };
+    }
+    for (const pt of parts) { // corner cloud of the part in its own frame, to keep it above the floor mid-tumble
+      pt.node.reset(); pt.node.pos[0] = pt.node.pos[1] = pt.node.pos[2] = 0; pt.node.rot[0] = pt.node.rot[1] = pt.node.rot[2] = 0;
+      const pts = [];
+      for (const p of MF.updateRig(pt.node, MF.mat(), [])) {
+        const m = p.world;
+        for (let c = 0; c < 8; c++) { const x = c & 1 ? p.hx : -p.hx, y = c & 2 ? p.hy : -p.hy, z = c & 4 ? p.hz : -p.hz; pts.push(m[0] * x + m[1] * y + m[2] * z + m[9], m[3] * x + m[4] * y + m[5] * z + m[10], m[6] * x + m[7] * y + m[8] * z + m[11]); }
+      }
+      pt.cloud = pts; pt.node.reset();
+    }
+    const Mp = MF.mat(), Mt = MF.mat(), Mw = MF.mat(), Mr = MF.mat(), Mq = MF.mat();
+    const flyParts = (n, u, boost) => { // u: seconds since the blast
+      if (u < 0) return;
+      MF.matFromEuler(Mp, n.pelvis.pos[0], n.pelvis.pos[1], n.pelvis.pos[2], n.pelvis.rot[0], n.pelvis.rot[1], n.pelvis.rot[2]);
+      MF.matFromEuler(Mt, n.torso.pos[0], n.torso.pos[1], n.torso.pos[2], n.torso.rot[0], n.torso.rot[1], n.torso.rot[2]);
+      MF.matMul(Mw, Mp, Mt);
+      for (const pt of parts) {
+        const L = pt.land[boost], tt = Math.min(u, L.tl), vx = pt.v[0] * boost, vy = pt.v[1] * boost, vz = pt.v[2] * boost;
+        const px = pt.p0[0] + vx * tt, pz = pt.p0[2] + vz * tt;
+        let py = u >= L.tl ? L.h : pt.p0[1] + vy * tt - 0.5 * g * tt * tt;
+        if (u < L.tl) { // mid-tumble: keep the part's lowest corner above the floor
+          const sp = pt.spin; MF.matFromEuler(Mr, 0, 0, 0, sp[0] * u, sp[1] * u, sp[2] * u); MF.matMul(Mq, Rt, Mr);
+          let lo = 1e9; const cl = pt.cloud;
+          for (let i = 0; i < cl.length; i += 3) lo = Math.min(lo, Mq[3] * cl[i] + Mq[4] * cl[i + 1] + Mq[5] * cl[i + 2]);
+          py = Math.max(py, -lo);
+        }
+        const dx = px - Mw[9], dy = py - Mw[10], dz = pz - Mw[11]; // into the torso frame (orientation is constant after the blast)
+        const nd = n[pt.nm];
+        nd.pos[0] = Rt[0] * dx + Rt[3] * dy + Rt[6] * dz; nd.pos[1] = Rt[1] * dx + Rt[4] * dy + Rt[7] * dz; nd.pos[2] = Rt[2] * dx + Rt[5] * dy + Rt[8] * dz;
+        const rot = u >= L.tl ? L.rot : pt.spin.map((x) => x * u);
+        nd.rot[0] = rot[0]; nd.rot[1] = rot[1]; nd.rot[2] = rot[2];
+      }
+    };
+
+    // key poses (absolute joint values); pelvis height solved so the lowest prim rests on the floor
+    const S2 = [o.R, o.Lf];
+    const base = { py: N.pelvis.base.pos[1], pz: N.pelvis.base.pos[2], prx: N.pelvis.base.rot[0], trx: N.torso.base.rot[0], nrx: N.neck.base.rot[0] };
+    for (const s of S2) Object.assign(base, { ['h' + s]: N['hip' + s].base.rot[0], ['k' + s]: N['knee' + s].base.rot[0], ['a' + s]: N['ankle' + s].base.rot[0], ['s' + s]: N['sh' + s].base.rot[0], ['z' + s]: N['sh' + s].base.rot[2], ['e' + s]: N['el' + s].base.rot[0] });
+    const apply = (n, P) => {
+      n.pelvis.pos[1] = P.py; n.pelvis.pos[2] = P.pz; n.pelvis.rot[0] = P.prx; n.pelvis.rot[1] = 0; n.pelvis.rot[2] = 0;
+      n.torso.rot[0] = P.trx; n.torso.rot[1] = 0; n.torso.rot[2] = 0; n.neck.rot[0] = P.nrx;
+      for (const s of S2) { n['hip' + s].rot[0] = P['h' + s]; n['knee' + s].rot[0] = P['k' + s]; n['ankle' + s].rot[0] = P['a' + s]; n['sh' + s].rot[0] = P['s' + s]; n['sh' + s].rot[2] = P['z' + s]; n['el' + s].rot[0] = P['e' + s]; }
+    };
+    const mix = (A, B, u) => { const o2 = {}; for (const key in A) o2[key] = A[key] + (B[key] - A[key]) * u; return o2; };
+    const solve = (P, keepKnees) => { // drop/raise the pelvis so the lowest point touches the floor
+      root.reset(); apply(N, P); const lo = lowest(posed()); P.py -= lo; return P;
+    };
+    const kneel = solve(Object.assign({}, base, { prx: 0.18, trx: base.trx + 0.3, nrx: -0.25 }, ...S2.map((s) => ({ ['h' + s]: -0.2, ['k' + s]: 1.55, ['a' + s]: -0.45, ['s' + s]: 0.25, ['z' + s]: s * 0.15, ['e' + s]: -0.3 }))));
+    const slump = solve(Object.assign({}, base, ...S2.map((s) => ({ ['h' + s]: -0.05, ['k' + s]: 1.5, ['a' + s]: -0.5 }))));
+    const prone = Object.assign({}, base, { prx: 1.42, trx: base.trx + 0.1, nrx: -1.0 }, ...S2.map((s) => ({ ['h' + s]: -0.12 - s * 0.05, ['k' + s]: 0.12, ['a' + s]: -0.25, ['s' + s]: 0.15, ['z' + s]: s * 0.35, ['e' + s]: -0.2 }))); // arms lie back along the sides
+    { // keep the knees where they were when the mech topples forward off them
+      root.reset(); apply(N, kneel); posed(); const kz = (N['knee-1'].world[11] + N.knee1.world[11]) / 2;
+      root.reset(); apply(N, prone); posed(); const kz2 = (N['knee-1'].world[11] + N.knee1.world[11]) / 2;
+      prone.pz += kz - kz2; solve(prone);
+    }
+    root.reset(); apply(N, prone); posed();
+    const tw2 = N.torso.world, impact = [(tw2[1] * cy + tw2[9]) / k, 3, (tw2[7] * cy + tw2[11]) / k];
+    const topBack = [impact[0], (tw2[4] * cy + tw2[10]) / k + o.cD * 0.5 + 9, impact[2] - 2]; // the upturned back of the prone wreck
+    root.reset();
+    // core glow (meltdown)
+    const glow = N.torso.child('coreGlow', [0, o.chestY, o.cD / 2 - 1.5]);
+    glow.startHidden = true;
+    [3, 6, 9].forEach((sz, i) => { const g2 = glow.child('coreGlow' + i); g2.startHidden = true; g2.box(sz, sz * 0.8, sz * 0.7, { ...GLOW, bevel: sz * 0.25, bevelSet: 'round' }); });
+
+    const sd = (bp.seed || 1) % 97;
+    const X = MF.FX || NOFX;
+    const knees = S2.map((s) => { root.reset(); posed(); const w2 = N['knee' + s].world; return [w2[9] / k, w2[10] / k, w2[11] / k + 2]; });
+    root.reset();
+    const pelvisC = [0, pelY, 0];
+    const front = [chest[0], chest[1] + 1, chest[2] + o.cD * 0.45], sideL = [chest[0] + o.cW * 0.5, chest[1] + 4, chest[2]], sideR = [chest[0] - o.cW * 0.5, chest[1] + 2, chest[2] - 2];
+    const fx = {
+      explode: lazy(() => X.group([
+        X.burst(root, 'dxK', { kind: 'spark', count: 14, origin: front, dir: [0, 0.6, 1], spread: 1, seed: sd, start: 0, stagger: 0.2 }),
+        X.explosion(root, { name: 'dxA', origin: front, seed: sd + 1, scale: 1.7, start: 0.22, debris: 16 }),
+        X.burst(root, 'dxA2', { kind: 'fire', count: 10, origin: [chest[0], chest[1] + o.cH * 0.4, chest[2]], dir: [0, 1, 0], spread: 1.2, seed: sd + 20, start: 0.24, stagger: 0.1, scale: 1.4 }),
+        X.explosion(root, { name: 'dxB', origin: sideL, seed: sd + 2, scale: 0.9, start: 0.72 }),
+        X.explosion(root, { name: 'dxC', origin: [sideR[0], pelvisC[1] + 2, pelvisC[2] + 5], seed: sd + 3, scale: 0.9, start: 1.15 }),
+        X.burst(root, 'dxF', { kind: 'fire', count: 22, origin: [chest[0], chest[1] + o.cH * 0.45, chest[2] + 2], dir: [0, 1, 0], spread: 0.6, seed: sd + 4, start: 0.6, stagger: 2.3, scale: 0.85 }),
+        X.smokeTrail(root, { name: 'dxS', origin: [chest[0], chest[1] + o.cH * 0.6, chest[2]], seed: sd + 5, start: 0.5, stagger: 2.4, count: 14, scale: 1.1 }),
+      ])),
+      collapse: lazy(() => X.group([
+        X.hitSparks(root, { name: 'dcK1', origin: knees[0], dir: [0, 0.5, 1], seed: sd + 6 }),
+        X.burst(root, 'dcK2', { kind: 'spark', count: 12, origin: knees[1], dir: [0, 0.5, 1], spread: 0.8, seed: sd + 7, start: 0.28 }),
+        X.burst(root, 'dcK3', { kind: 'spark', count: 10, origin: chest, dir: [0, 0.4, 1], spread: 1, seed: sd + 8, start: 0.55, stagger: 0.3 }),
+        X.burst(root, 'dcD', { kind: 'debris', count: 10, origin: impact, dir: [0, 1, 0], spread: 1.4, seed: sd + 9, start: 1.25, mats: ['metal', 'primary'] }),
+        X.burst(root, 'dcU', { kind: 'smoke', count: 8, origin: impact, dir: [0, 0.3, 0], spread: 1.4, seed: sd + 10, start: 1.25, stagger: 0.2, scale: 0.9 }),
+        X.explosion(root, { name: 'dcX', origin: topBack, seed: sd + 11, scale: 0.8, start: 1.45, debris: 8 }),
+        X.burst(root, 'dcF', { kind: 'fire', count: 24, origin: topBack, dir: [0, 1, 0], spread: 0.7, seed: sd + 12, start: 1.45, stagger: 1.5, scale: 1.1 }),
+        X.smokeTrail(root, { name: 'dcS', origin: [topBack[0], topBack[1] + 3, topBack[2]], seed: sd + 13, start: 1.3, stagger: 1.7, count: 12, scale: 1.1 }),
+      ])),
+      meltdown: lazy(() => X.group([
+        X.burst(root, 'dmK', { kind: 'spark', count: 18, origin: front, dir: [0, 0.8, 0.6], spread: 1.2, seed: sd + 14, start: 0.3, stagger: 1.0 }),
+        X.burst(root, 'dmE', { kind: 'ember', count: 12, origin: chest, dir: [0, 1, 0], spread: 0.9, seed: sd + 15, start: 0.5, stagger: 0.8 }),
+        X.explosion(root, { name: 'dmA', origin: front, seed: sd + 16, scale: 2.3, start: 1.4, debris: 20 }),
+        X.burst(root, 'dmA2', { kind: 'fire', count: 14, origin: [chest[0], chest[1] + o.cH * 0.5, chest[2]], dir: [0, 1, 0], spread: 1.4, seed: sd + 21, start: 1.42, stagger: 0.12, scale: 1.7 }),
+        X.explosion(root, { name: 'dmB', origin: [chest[0] - 6, chest[1] - 8, chest[2]], seed: sd + 17, scale: 0.8, start: 1.75 }),
+        X.burst(root, 'dmF', { kind: 'fire', count: 16, origin: [chest[0], chest[1] - 8, chest[2]], dir: [0, 1, 0], spread: 0.5, seed: sd + 18, start: 1.8, stagger: 1.2, scale: 0.8 }),
+        X.smokeTrail(root, { name: 'dmS', origin: [chest[0], chest[1], chest[2]], seed: sd + 19, start: 1.6, stagger: 1.4, count: 10, scale: 1.2 }),
+      ])),
+    };
+    const Mid = MF.mat();
+    const floorClamp = (n, flying) => { // lift the body if any (non-flying) part would dip below the floor
+      if (flying) for (const pt of parts) n[pt.nm].hidden = true;
+      const lo = lowest(MF.updateRig(n.pelvis, Mid, []));
+      if (flying) for (const pt of parts) n[pt.nm].hidden = false;
+      if (lo < 0) n.pelvis.pos[1] -= lo;
+    };
+    const shake = (n, amp, t) => { n.torso.pos[0] += Math.sin(t * 61) * amp * k; n.torso.pos[2] += Math.sin(t * 47 + 1) * amp * k; };
+    ctx.anims.push((st, n) => {
+      if (st.death == null) return;
+      const t = Math.max(0, st.death), type = info.deaths.includes(st.deathType) ? st.deathType : info.deaths[0];
+      apply(n, base);
+      if (type === 'explode') {
+        if (t < 0.22) shake(n, 0.9 * t / 0.22, t);
+        if (t > 0.22 && t < 0.5) shake(n, 0.6 * (0.5 - t) / 0.28, t); // blast jolt (translation only: flying parts stay in world space)
+        floorClamp(n, t >= 0.22);
+        flyParts(n, t - 0.22, 1);
+      } else if (type === 'meltdown') {
+        const ramp = Math.min(1, t / 1.4);
+        if (t < 1.4) { shake(n, 0.25 + 0.9 * ramp, t); n.coreGlow.hidden = false; n['coreGlow' + Math.min(2, Math.floor(ramp * 3))].hidden = false; }
+        apply(n, mix(base, slump, smooth((t - 1.55) / 0.55))); // the legs give way after the blast (translation only)
+        floorClamp(n, t >= 1.4);
+        flyParts(n, t - 1.4, 1.3);
+      } else { // collapse: knees buckle, then the mech crashes forward onto its chest
+        if (t < 0.3) { shake(n, 0.5, t); apply(n, mix(base, Object.assign({}, base, { trx: base.trx - 0.12 }), smooth(t / 0.3))); }
+        else if (t < 0.8) apply(n, mix(base, kneel, smooth((t - 0.3) / 0.5)));
+        else { const u = Math.min(1, (t - 0.8) / 0.45); apply(n, mix(kneel, prone, u * u)); }
+        if (t > 1.25 && t < 1.6) n.pelvis.pos[1] += Math.sin((t - 1.25) / 0.35 * PI) * 1.2 * k; // bounce
+        floorClamp(n, false);
+      }
+      fx[type].update(t);
     });
   }
 
@@ -918,7 +1259,7 @@
     else torso.box(4, 4, 1, { at: [cW * 0.12, chestY - cH * 0.06, cD / 2 + 1.1], rot: [0.12, 0, PI / 4], mat: 'tertiary' });
     torso.box(1.6, 1.4, 1, { ...GLOW, at: [-cW * 0.16, chestY - cH * 0.14, cD / 2 + 1] });
     torso.box(cW * 0.6, 3, cD * 0.55, { at: [0, topY - 0.8, -cD * 0.15], mat: 'metal', bevel: 0.6 }); // collar ring
-    const neck = A.hood ? [topY - 4.5, cD * 0.26] : cors ? [topY + 0.2, cD * 0.08] : [topY - 3.5, type === 'brawler' ? cD * 0.2 : cD * 0.1];
+    const neck = A.hood ? [topY - 4.5, cD * 0.26] : cors ? [topY + 0.2, cD * 0.08] : type === 'commander' ? [topY - 1.2, cD * 0.12] : [topY - 3.5, type === 'brawler' ? cD * 0.2 : cD * 0.1];
     if (A.hood) torso.box(cW * 0.5, 3.2, cD * 0.5, { at: [0, topY + 4.2, cD * 0.24], rot: [0.3, 0, 0], mat: 'primary', bevel: 0.5, cuts: [[1, 0, 1, 2.5], [-1, 0, 1, 2.5], [0, -1, 1, 1.2]], detail: { type: 'panel', face: '+y', at: 0, dir: 'v' } });
     return { pelvis, torso, cW, cH, cD, chestY, topY, shX: cW / 2 + 2, shY: topY - 4, thigh, shin, b, ankY, hipX, legW, neck, frontZ: thW * 0.55 + 1.6 };
   }
@@ -1075,12 +1416,20 @@
   // ------------------------------------------------------------------ backpacks
   function buildBack(ctx, pk, kind, t) {
     const { cW, cH, bev } = t;
+    const jets = (pts) => { // exhaust glow shown while running (and firing)
+      pts.forEach((q, i) => { const j = pk.child('jet' + i, q); j.startHidden = true; j.cone('y', 0.5, 2.1, 4.5, { ...GLOW, at: [0, -2.2, 0], sides: 6 }); });
+      ctx.anims.push((st, n) => {
+        const on = st.death == null && (Math.min(1, st.run || 0) * Math.min(1, st.move || 0) > 0.25);
+        for (let i = 0; i < pts.length; i++) { const j = n['jet' + i]; j.hidden = !on; if (on) j.pos[1] += Math.sin(st.t * 43 + i * 2) * 0.5 * ctx.k; }
+      });
+    };
     const flameAnim = (names) => ctx.anims.push((st, n) => {
       for (const nm of names) { const f = n[nm]; if (!f) continue; f.hidden = !(st.move > 0.2 || st.fire > 0.3); f.pos[1] += Math.sin(st.t * 41 + nm.length) * 0.4 * ctx.k; }
     });
     switch (kind) {
       case 'binders': { // Freedom-like wing binders rising over the shoulders
         pk.box(cW * 0.6, 9, 4, { at: [0, 0, -1], mat: 'primary', bevel: 1, detail: { type: 'vent', face: '-z', pitch: 1.5, inset: 1.5 } });
+        jets([[-cW * 0.15, -5, -1.5], [cW * 0.15, -5, -1.5]]);
         for (const s of [-1, 1]) {
           const w = pk.child('wing' + s, [s * cW * 0.22, 2, -2.5], [0.3, 0, -s * 0.48]);
           w.box(2.4, 27, 9, { at: [0, 11.5, 0], mat: 'secondary', bevel: 0.6, cuts: [[0, 1, -1, 5], [0, -1, 1, 3]], detail: { type: 'band', face: 'side', dir: 'h', at: 6, size: 1, mat2: 'accent' } });
@@ -1162,6 +1511,7 @@
       case 'antenna': { // pack with a tall curved antenna fin rising from the back
         pk.box(cW * 0.6, 10, 5, { at: [0, 0, -1.5], mat: 'primary', bevel: bev, cuts: [[1, 1, -1, 2], [-1, 1, -1, 2]], detail: { type: 'vent', face: '-z', pitch: 1.5, inset: 1.6 } });
         for (const s of [-1, 1]) pk.cone('y', 1.8, 2.6, 4, { at: [s * cW * 0.16, -6.5, -2], mat: 'metal', sides: 8 });
+        jets([[-cW * 0.16, -8.5, -2], [cW * 0.16, -8.5, -2]]);
         let fn = pk.child('fin', [cW * 0.12, 4, -3], [-0.1, 0, -0.08]);
         for (let i = 0; i < 3; i++) {
           const L2 = 9 - i * 1.6;
@@ -1177,12 +1527,14 @@
         pk.box(cW * 0.9, 2, 11, { at: [0, 11.8, -4.5], mat: 'secondary', bevel: 0.4 });
         for (const s of [-1, 1]) pk.box(2, 16, 2, { at: [s * (cW * 0.43 + 1), 1, -8.5], mat: 'metal' });
         for (const s of [-1, 1]) pk.cone('y', 1.8, 2.6, 4, { at: [s * cW * 0.2, -11, -3], mat: 'metal', sides: 8 });
+        jets([[-cW * 0.2, -13, -3], [cW * 0.2, -13, -3]]);
         pk.box(1.4, 1.4, 1, { ...GLOW, at: [cW * 0.3, 8, -9.8] });
         break;
       }
       default: // slim pack
         pk.box(cW * 0.55, 8, 3.5, { at: [0, 0, -1], mat: 'primary', bevel: 1, detail: { type: 'vent', face: '-z', pitch: 1.5, inset: 1.2 } });
         for (const s of [-1, 1]) pk.cone('y', 1.6, 2.2, 3, { at: [s * cW * 0.14, -5.5, -1.2], mat: 'metal', sides: 8 });
+        jets([[-cW * 0.14, -7, -1.2], [cW * 0.14, -7, -1.2]]);
     }
   }
 

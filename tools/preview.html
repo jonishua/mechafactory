@@ -13,7 +13,7 @@ const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
 const R = new MF.Renderer(CW, CH);
 const tmp = document.createElement('canvas'); tmp.width=CW; tmp.height=CH;
 seeds.forEach((seed, row) => {
-  const skip = new Set(['seeds','dirs','zoom','phase','move','frame','walk','line','cw','ch','fire','pal','look']);
+  const skip = new Set(['seeds','dirs','zoom','phase','move','frame','walk','line','cw','ch','fire','pal','look','hit','hitDir','death','deathType','act','actT','run']);
   // slot overrides are passed as locks so the remaining slots roll to match them
   const prev = { line: q.get('line') || 'modular' }, locks = {};
   for (const [k, v] of q.entries()) if (!skip.has(k)) { prev[k] = isNaN(+v) ? v : +v; locks[k] = 1; }
@@ -24,7 +24,13 @@ seeds.forEach((seed, row) => {
   const pal = MF.buildPalette(bp.colors);
   for (let d=0; d<dirs; d++) {
     const walk = q.get('walk') || q.get('fire'); const yaw = walk ? +walk : d*Math.PI*2/dirs;
-    const fire = q.get('fire'); rig.animate({phase: q.get('walk') ? d*Math.PI*2/dirs : phase, move: q.get('walk') ? 1 : move, t: 0, fire: fire ? 1 - d/dirs : 0, fireN: 1});
+    const fire = q.get('fire'); const st = {phase: q.get('walk') ? d*Math.PI*2/dirs : phase, move: q.get('walk') ? 1 : move, t: 0, fire: fire ? 1 - d/dirs : 0, fireN: 1};
+    // reaction states (added): &hit=secs[&hitDir=rad] &death=secs[&deathType=name] &act=name[&actT=secs] &run=0..1
+    if (q.get('hit') != null) { st.hit = +q.get('hit'); st.hitN = 1; st.hitDir = +(q.get('hitDir') || 0); }
+    if (q.get('death') != null) { st.death = +q.get('death'); st.deathType = q.get('deathType'); st.deathSeed = seed; }
+    if (q.get('act')) st.act = { name: q.get('act'), t: +(q.get('actT') || 0.6) };
+    if (q.get('run') != null) st.run = +q.get('run');
+    rig.animate(st);
     const w = MF.matFromEuler(MF.mat(), 0, rig.hover||0, 0, 0, yaw, 0);
     const prims = MF.updateRig(rig.root, w, []);
     R.render({units:[{prims, pal, x:0, z:0, radius: rig.radius, height: rig.height, selected:false}], cam:{x:0,z:0,pitch:0.55,ox:CW/2,oy:CH-12}, floor:'plain', look: q.get('look') || 'bright', bg: pal.bg, floorRamp: pal.floor, time:0});

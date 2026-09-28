@@ -255,6 +255,18 @@
       H0 = Math.min(H0, Math.sqrt(Math.max(0, Lmax * Lmax - z * z)) - walkBob(P, p));
     }
     P.walkH0 = H0;
+    // run: [duty (stance share of the cycle; < 0.5 gives a flight phase), back-kick/reach (share of the stride),
+    //       lean, bob]: light roles sprint, heavy roles lumber with more ground contact
+    const RN = { rogue: [0.34, 0.14, 0.26, 0.8], sniper: [0.36, 0.13, 0.22, 0.9], soldier: [0.4, 0.1, 0.18, 1.0], knight: [0.4, 0.1, 0.17, 1.0],
+      heavy: [0.44, 0.07, 0.13, 1.2], berserker: [0.42, 0.08, 0.15, 1.3] }[H.role] || [0.4, 0.1, 0.18, 1.0];
+    P.runDuty = RN[0]; P.runE = RN[1] * P.stride; P.runLean = RN[2]; P.runBob = RN[3];
+    P.runLift = P.walkLift * (H.body === 'lean' ? 1.9 : 1.5) + P.thigh * 0.2;
+    let H0r = 1e9;
+    for (let i = 0; i <= 16; i++) {
+      const p = (i / 16) * 2 * PI * P.runDuty, z = P.stride * P.runDuty / 2 - P.stride * P.runDuty * (i / 16);
+      H0r = Math.min(H0r, Math.sqrt(Math.max(0, Lmax * Lmax - z * z)) + P.runBob * Math.cos(2 * (p - PI * P.runDuty)));
+    }
+    P.runH0 = H0r - 1.5; // knees stay soft in the run
     return pelvis;
   }
   // body height offset during the walk: lowest just after contact (down), highest after passing (up)
@@ -793,8 +805,8 @@
   function lowCarry(H, s, st, f, p, rot, n, mzn) {
     const P = H.P, u = 1 - f;
     const up = f > 0 ? ease(seg(u, 0, 0.1)) * (1 - ease(seg(u, 0.86, 1))) : 0;
-    const mv = Math.min(1, st.move);
-    const carry = [s * P.chest[0] * 0.26, -P.chest[1] * 0.06 + 1.5 * mv + Math.sin(st.phase * 2) * 0.3 * mv, P.chest[2] * 0.5 + 1.2];
+    const mv = Math.min(1, st.move), rnv = clamp(st.run || 0, 0, 1) * mv;
+    const carry = [s * P.chest[0] * 0.26, -P.chest[1] * 0.06 + 1.5 * mv + 2.5 * rnv + Math.sin(st.phase * 2) * 0.3 * mv, P.chest[2] * 0.5 + 1.2];
     const cy = Math.cos(rot[1]), cx = Math.cos(rot[0]);
     const dAim = [Math.sin(rot[1]) * cx, -Math.sin(rot[0]), cy * cx];
     if (n[mzn] && up < 0.85) n[mzn].hidden = true;
@@ -840,6 +852,82 @@
     H.tgt[s] = { p: k.p, rot };
     const both = ease(seg(u, 0.16, 0.3)) * (1 - ease(seg(u, 0.66, 0.8)));
     if (both > 0) H.tgt[-s] = { p: mix3(H.hangP[-s], [k.p[0] + o[0], k.p[1] + o[1], k.p[2] + o[2]], both) };
+  }
+
+  // ------------------------------------------------------------- extra actions (st.act): reload, aim, block
+  const actBlend = (t, dur, a = 0.15, b = 0.22) => ease(seg(t, 0, a)) * (1 - ease(seg(t, dur - b, dur)));
+  const dirOf = (rot) => { const m = eulerM(rot); return [m[2], m[5], m[8]]; };
+  // guns with a detachable magazine/canister: remember it and build the falling one (a single tumbling prop)
+  function gunInfo(ctx, H, s, local, mat, top) {
+    if (H.buildingProp) return;
+    const P = H.P, ws = P.ws, [W, Ht, D] = P.chest;
+    // where the empty one falls from (the reload pose, roughly): chest space -> world above the hips
+    const p = [s * W * 0.22, Ht * 0.28, D * 0.5 + 3], R = eulerM(aim([-s * 0.4, 0.45, 0.8], 0));
+    const o = apply(R, [local[0] * ws, (local[1] - 6) * ws, local[2] * ws]);
+    const K = MF.getBuildScale();
+    MF.setBuildScale(ctx.k);
+    const fx = MF.FX.burst(ctx.root, 'mag' + s, { kind: 'debris', count: 1, origin: [p[0] + o[0], P.hipY + 1.5 + p[1] + o[1], p[2] + o[2]], dir: [s * 0.3, -0.2, 0.3], spread: 0.2, speed: [6, 9], size: [2.6, 3.2], mats: [mat], seed: 41 });
+    MF.setBuildScale(K);
+    H.gun = H.gun || {}; H.gun[s] = { mag: 'mag' + s, local, fx, top: !!top };
+  }
+  function weaponAct(st, n, H, w) {
+    const a = st.act, s = w.s, key = w.key, P = H.P, t = a.t, [W, Ht, D] = P.chest;
+    const T = H.tgt[s];
+    if (!T) return;
+    if (a.name === 'reload' && (key === 'mg' || key === 'flamer' || key === 'rifle' || key === 'pistol')) {
+      const dur = 1.4, b = actBlend(t, dur), ws = P.ws;
+      const two = w.def.hands === 2;
+      // gun tilted up across the chest in the firing hand
+      const pR = two ? [s * W * 0.22, Ht * 0.28, D * 0.5 + 3] : [H.sh[s][0] * 0.5, Ht * 0.3, D * 0.5 + 4];
+      const dR = key === 'rifle' ? [-s * 0.25, 0.85, 0.35] : [-s * 0.4, 0.45, 0.8];
+      const p = mix3(T.p, pR, b), rot = aim(mix3(T.rot ? dirOf(T.rot) : dR, dR, b), 0);
+      H.tgt[s] = { p, rot };
+      const Rm = eulerM(rot), at = (v) => { const o = apply(Rm, [v[0] * ws, v[1] * ws, v[2] * ws]); return [p[0] + o[0], p[1] + o[1], p[2] + o[2]]; };
+      const off = H.tgt[-s];
+      if (off && H.weapons.some((q) => q.s === -s && q.key !== key)) return; // the other hand is busy with its own weapon
+      const g = H.gun && H.gun[s];
+      const pouch = [-s * W * 0.42, -Ht * 0.05, D * 0.4 + 1];
+      let hp;
+      if (g) { // off hand: grab the magazine, pull it out and let it fall, fetch a fresh one from the belt, seat it
+        const slot = at(g.local), below = at([g.local[0], g.local[1] + (g.top ? 5 : -6), g.local[2]]);
+        const k1 = ease(seg(t, 0.15, 0.32)), k2 = ease(seg(t, 0.32, 0.5)), k3 = ease(seg(t, 0.5, 0.8)), k4 = ease(seg(t, 0.8, 1.0)), k5 = ease(seg(t, 1.0, 1.15));
+        hp = mix3(mix3(mix3(mix3(mix3(off ? off.p : H.hangP[-s], slot, k1), below, k2), pouch, k3), below, k4), slot, k5);
+        const mg = n[g.mag];
+        if (mg) {
+          const d = t < 0.5 ? k2 : 1 - k5;
+          mg.pos[1] += (g.top ? 5 : -6) * d * H.k * ws;
+          mg.hidden = t >= 0.5 && t < 1.0;
+        }
+        if (g.fx) g.fx.update(t - 0.5);
+      } else if (key === 'rifle') { // work the bolt (sci-fi) or ram the charge home (fantasy)
+        const bolt0 = at([0, 4.5, H.sci ? 2 : 20]), bolt1 = at([0, 4.5, H.sci ? -2 : 12]);
+        const cyc = Math.max(0, Math.sin(seg(t, 0.3, 1.1) * PI * (H.sci ? 2 : 4)));
+        hp = mix3(mix3(off ? off.p : H.hangP[-s], bolt0, ease(seg(t, 0.12, 0.3))), bolt1, cyc);
+      } else { // pistol: palm the new magazine up into the grip
+        const base = at([0, -5, -0.4]), grip = at([0, -2.5, -0.4]);
+        hp = mix3(mix3(mix3(H.hangP[-s], base, ease(seg(t, 0.2, 0.45))), pouch, ease(seg(t, 0.5, 0.75))), grip, ease(seg(t, 0.8, 1.05)));
+      }
+      const back = ease(seg(t, 1.15, 1.3));
+      H.tgt[-s] = { p: mix3(off ? off.p : H.hangP[-s], mix3(hp, off ? off.p : H.hangP[-s], back), b), wrist: [0, 0, 0] };
+      H.fx.lean += 0.05 * b;
+      return;
+    }
+    if (a.name === 'block' && H.blocker === key) {
+      const b = actBlend(t, 1.2, 0.12, 0.22);
+      H.fx.crouch += 0.14 * b; H.fx.lean += 0.08 * b;
+      if (key === 'shield') { // shield up and braced in front
+        H.tgt[s] = { p: mix3(T.p, [H.sh[s][0] * 0.4, Ht * 0.45, D * 0.5 + 5], b), rot: aim(mix3(T.rot ? dirOf(T.rot) : [s * 0.3, 0, 1], [s * 0.15, 0.05, 1], b), 0) };
+      } else if (key === 'greatsword') { // parry guard: blade up across the body
+        const p = mix3(T.p, [s * 1.5, Ht * 0.42, D * 0.5 + 4], b), rot = aim(mix3(T.rot ? dirOf(T.rot) : [0, 1, 0], [-s * 0.55, 0.8, 0.25], b), -s * 1.5 * b);
+        const o = apply(eulerM(rot), [0, 0, H.g2 || -6]);
+        H.tgt[s] = { p, rot };
+        H.tgt[-s] = { p: [p[0] + o[0], p[1] + o[1], p[2] + o[2]] };
+      } else { // sword parry, or both daggers crossed in front
+        const p = key === 'sword' ? [H.sh[s][0] * 0.35, Ht * 0.4, D * 0.5 + 4] : [-s * 0.8, Ht * 0.42, D * 0.5 + 4];
+        const d = key === 'sword' ? [-s * 0.5, 0.8, 0.3] : [-s * 0.55, 0.75, 0.35];
+        H.tgt[s] = { p: mix3(T.p, p, b), rot: aim(mix3(T.rot ? dirOf(T.rot) : d, d, b), key === 'dagger' ? s * 0.6 : 0) };
+      }
+    }
   }
 
   const HUMAN_WEAPONS = {
@@ -901,7 +989,7 @@
             const rest = H.sd ? [H.sh[s][0] * 0.9, -0.5, P.chest[2] * 0.5 + 3] : [H.hangP[s][0] + s * 0.2, H.hangP[s][1] + 0.8, H.hangP[s][2] + 1.4];
             let restD = [s * 0.25, 0.55, 0.8];
             if (!H.sd) { // styled: point down at the side, angled forward just enough to keep the tip off the ground
-              const hy = P.hipY + 1.5 + rest[1], reach = (19 * P.ws + P.fist * 0.5);
+              const hy = P.hipY + 1.5 + rest[1] - 3 * clamp(st.run || 0, 0, 1), reach = (19 * P.ws + P.fist * 0.5);
               const vy = clamp((hy - 3) / reach, 0.3, 0.88);
               restD = [s * 0.1, -vy, Math.sqrt(1 - vy * vy)];
             }
@@ -1001,14 +1089,16 @@
           grip.box(3.6, 3.6, 7, { at: [0, 4, 11], mat: 'metal', bevel: 0.6, detail: { type: 'vent', face: 'side', pitch: 1.5, inset: 0.6 } });
           grip.cyl('z', 1.2, 4, { at: [0, 4, 16], mat: 'metal', sides: 6 });
           grip.box(3, 3, 2, { at: [0, 4, 18.6], mat: 'metal', bevel: 0.5 });
-          grip.cyl('x', 3.4, 3.2, { at: [0, 0.4, 5], mat: 'secondary', sides: 8, detail: { type: 'bolts', face: 'side', inset: 1.4 } });
+          grip.child('mag' + s, [0, 0.4, 5]).cyl('x', 3.4, 3.2, { mat: 'secondary', sides: 8, detail: { type: 'bolts', face: 'side', inset: 1.4 } }); // drum
+          gunInfo(ctx, H, s, [0, 0.4, 5], 'secondary');
           grip.box(1, 1.8, 5, { at: [0, 7.2, 1.5], mat: 'metal' });
           grip.box(1.8, 3, 2, { at: [0, 1, 10.5], mat: 'metal' });
           tip = [0, 4, 19.8];
         } else { // gatling blunderbuss: wooden stock, brass housing, spinning flared barrels, hopper
           grip.box(2.8, 3.6, 8, { at: [0, 2, -5], mat: 'leather', bevel: 0.8, cuts: [[0, -1, -1, 2]] });
           grip.cyl('z', 3.2, 6, { at: [0, 3.6, 2.8], mat: 'secondary', sides: 8, detail: { type: 'band', dir: 'h', at: 0, size: 0.5 } });
-          grip.box(3.2, 3.6, 3.6, { at: [0, 7.6, 1.8], mat: 'leather', bevel: 0.8 });
+          grip.child('mag' + s, [0, 7.6, 1.8]).box(3.2, 3.6, 3.6, { mat: 'leather', bevel: 0.8 }); // hopper
+          gunInfo(ctx, H, s, [0, 7.6, 1.8], 'leather', true);
           const spin = grip.child('spin' + s, [0, 3.6, 6]);
           for (let i = 0; i < 6; i++) { const a = (i / 6) * PI * 2; spin.cyl('z', 0.8, 11, { at: [Math.cos(a) * 1.9, Math.sin(a) * 1.9, 5.5], mat: 'metal', sides: 6 }); }
           spin.cyl('z', 2.9, 1.4, { at: [0, 0, 4], mat: 'secondary', sides: 8 });
@@ -1078,6 +1168,12 @@
               n[mzn].hidden = !(u > 0.2 && u < 0.34);
               H.fx.twist += s * 0.3 * up;
             }
+            if (st.act && st.act.name === 'aim') { // extra: kneel, shoulder the rifle, hold, stand
+              const ta = st.act.t;
+              up = Math.max(up, ease(seg(ta, 0.25, 0.55)) * (1 - ease(seg(ta, 1.5, 1.75))));
+              H.kneel = ease(seg(ta, 0, 0.35)) * (1 - ease(seg(ta, 1.65, 2)));
+              H.fx.lean += 0.08 * up;
+            }
             const pitch = P.lean + P.walkLean * m + H.fx.lean;
             const low = H.sd ? [H.sh[s][0] * 0.35, P.chest[1] * 0.1 + Math.sin(st.phase * 2) * 0.4 * m, P.chest[2] * 0.5 + 1.5]
               : [H.sh[s][0] * 0.25, P.chest[1] * 0.18, P.chest[2] * 0.5 + 2]; // styled: port arms
@@ -1103,13 +1199,15 @@
         grip.box(1.8, 4, 2.2, { at: [0, -0.4, -0.3], rot: [0.3, 0, 0], mat: sci ? 'metal' : 'leather' });
         if (sci) {
           grip.box(3.6, 4.6, 9, { at: [0, 3, 1], mat: 'primary', bevel: 0.9, detail: { type: 'bolts', face: 'side', inset: 1 } });
-          grip.cyl('z', 2.6, 8, { at: [0, -0.2, 5], mat: 'secondary', sides: 8, detail: { type: 'band', dir: 'h', at: 0, size: 0.7 } });
+          grip.child('mag' + s, [0, -0.2, 5]).cyl('z', 2.6, 8, { mat: 'secondary', sides: 8, detail: { type: 'band', dir: 'h', at: 0, size: 0.7 } }); // fuel canister
+          gunInfo(ctx, H, s, [0, -0.2, 5], 'secondary');
           grip.cyl('z', 1.3, 8, { at: [0, 3.4, 9], mat: 'metal', sides: 6 });
           grip.cone('z', 1.6, 2.8, 3, { at: [0, 3.4, 14.4], mat: 'metal', sides: 8 });
           grip.box(1.2, 1.2, 1.4, { at: [0, 1.4, 15], mat: 'accent', shadow: false });
         } else { // brass fire-lance with a snarling drake-mouth nozzle and a bellows keg
           grip.box(2.6, 3.4, 8, { at: [0, 2.2, -4], mat: 'leather', bevel: 0.7 });
-          grip.cyl('z', 2.8, 6, { at: [0, 0, 4], mat: 'leather', sides: 8, detail: { type: 'band', dir: 'h', at: 0, size: 0.6, mat2: 'secondary' } });
+          grip.child('mag' + s, [0, 0, 4]).cyl('z', 2.8, 6, { mat: 'leather', sides: 8, detail: { type: 'band', dir: 'h', at: 0, size: 0.6, mat2: 'secondary' } }); // bellows keg
+          gunInfo(ctx, H, s, [0, 0, 4], 'leather');
           grip.cyl('z', 1.2, 10, { at: [0, 3.2, 8], mat: 'secondary', sides: 6 });
           grip.box(3.4, 3.6, 4.4, { at: [0, 3.4, 14.4], mat: 'secondary', bevel: 0.8, cuts: [[0, 1, 1, 1.6]], detail: { type: 'light', face: 'side', pts: [[1, 0.8]], size: 0.5 } });
           grip.box(1, 1, 1, { at: [0, 2, 16.8], mat: 'accent', shadow: false });
@@ -1145,6 +1243,7 @@
         const fs = H.P.fist / ws;                    // fist size in weapon units
         const g2 = -(fs + 0.6);                       // second hand along the grip
         const L = Math.round(33 * (H.P.blade || 1));   // blade length (weapon units)
+        if (!H.buildingProp) H.g2 = g2 * ws;
         const model = (grip) => {
         grip.box(1.8, 1.8, fs * 2 + 2.5, { at: [0, 0, g2 / 2], mat: 'leather' });
         grip.box(2.8, 2.8, 2.4, { at: [0, 0, g2 - fs * 0.5 - 1.4], mat: sci ? 'metal' : 'secondary', bevel: 0.7 });
@@ -1306,7 +1405,9 @@
     }
     ctx.fireDecay = decay;
     ctx.gait = 'biped';
+    reactionSetup(ctx, H, arms);
     ctx.anims.push(makeAnimator(ctx, H, arms));
+    reactionCalibrate(ctx, H);
   }
 
   // ------------------------------------------------------------- animation
@@ -1316,12 +1417,12 @@
     const attackers = H.weapons.filter((w) => w.def.attack);
     const twoHanded = H.weapons.some((w) => w.def.hands === 2);
     const pole = (s) => [s * 0.55, -0.15, -1];
-    return (st, n) => {
+    const core = (st, n) => {
       const m = clamp(st.move || 0, 0, 1.3), m1 = Math.min(1, m), ph = st.phase || 0, t = st.t || 0;
       const fire = clamp(st.fire || 0, 0, 1);
       const idle = 1 - m1;
       const breath = Math.sin(t * 2.3);
-      const fx = H.fx; fx.twist = 0; fx.lean = 0; fx.crouch = 0; fx.headPitch = 0;
+      const fx = H.fx, pre = H.pre; fx.twist = pre.twist; fx.lean = pre.lean; fx.crouch = pre.crouch; fx.headPitch = pre.head; // pre: hit / death offsets (0 otherwise)
       // which hand attacks: alternate between two attacking weapons
       let active = null;
       if (attackers.length === 1) active = attackers[0].s;
@@ -1333,10 +1434,19 @@
         const reach = (P.U + arms[s].Feff) * 0.86;
         H.hangP[s] = H.sd ? [H.sh[s][0] * 1.08, H.sh[s][1] - reach + Math.abs(sw) * 0.25 + breath * 0.2 * idle * P.bob, 1.2 + sw + P.lean * 4]
           : [H.sh[s][0] + s * 0.9, H.sh[s][1] - (P.U + arms[s].Feff) * 0.9 + Math.abs(sw) * 0.25 + breath * 0.1 * idle, 0.4 + sw];
+        const rnA = H.sd ? 0 : clamp(st.run || 0, 0, 1) * ease(seg(m, 0, 0.5));
+        if (rnA > 0) { // running: elbows bent, fists pumping opposite the legs
+          const pump = Math.sin(s > 0 ? ph : ph + PI) * P.armSwing * 2.6;
+          H.hangP[s] = mix3(H.hangP[s], [H.sh[s][0] * 0.92 + s * 0.4, H.sh[s][1] - (P.U + arms[s].Feff) * 0.55 + Math.abs(pump) * 0.2, 1.5 + pump], rnA);
+        }
       }
+      H.kneel = 0;
       for (const w of H.weapons) w.ctl.pose(st, n, H, w.s, w.s === active ? fire : 0);
+      if (st.act) for (const w of H.weapons) weaponAct(st, n, H, w);
       // empty hands: hang and counter-swing
       for (const s of [-1, 1]) if (!H.tgt[s]) H.tgt[s] = { p: H.hangP[s], wrist: [0, 0, 0] };
+      // dying: once the weapon is dropped the arm goes limp
+      if (pre.limp > 0) for (const s of [-1, 1]) if (pre.drop[s]) H.tgt[s] = { p: mix3(H.tgt[s].p, H.hangP[s], pre.limp), wrist: [0, 0, 0] };
       if (!H.sd) { stylizedBody(st, n, H, m, m1, ph, t, fire, idle, breath); return finishArms(st, n, H, arms, pole, m1, ph, t); }
       // legs: swing / lift, crouch keeps feet planted; pelvis height from the stance leg
       const c = fx.crouch + P.walkCrouch * m1 + breath * 0.018 * idle * P.bob;
@@ -1364,6 +1474,13 @@
       }
       finishArms(st, n, H, arms, pole, m1, ph, t);
     };
+    // reactions wrap the pose: the dead play the idle base under the death pose; hits add a flinch on top
+    return (st, n) => {
+      const dead = st.death != null && st.death >= 0;
+      reactPre(st, n, H);
+      core(dead ? Object.assign({}, st, { move: 0, run: 0, fire: 0, act: null }) : st, n);
+      reactPost(st, n, H);
+    };
   }
 
   function finishArms(st, n, H, arms, pole, m1, ph, t) {
@@ -1385,7 +1502,7 @@
       for (const fl of H.flow) {
         const nd = n[fl.n];
         if (!nd) continue;
-        nd.rot[0] = fl.base + Math.sin(t * 2.1 + fl.ph + ph) * fl.amp * (H.sd ? 1 : 0.5) + fl.walk * m1 + Math.sin(ph * 2 + fl.ph) * 0.06 * m1 - (fl.lean ? fx.lean * 0.8 : 0);
+        nd.rot[0] = fl.base + Math.sin(t * 2.1 + fl.ph + ph) * fl.amp * (H.sd ? 1 : 0.5) + fl.walk * m1 + Math.sin(ph * 2 + fl.ph) * 0.06 * m1 - (fl.lean ? fx.lean * 0.8 : 0) + (H.kneel || 0) * 0.9; // kneeling: the cape swings clear of the floor
       }
   }
 
@@ -1399,14 +1516,21 @@
     const act = fire > 0 ? ease(seg(u, 0, 0.15)) * (1 - ease(seg(u, 0.8, 1))) : 0;
     // w: walk blend. The idle stance (A-frame splay, stagger, contrapposto, hip drop, knee ease) is fully gone by
     // move 0.5, so the walk runs from a neutral straight-legged base; it blends back in when stopping.
-    const w = ease(seg(m, 0, 0.5)), run = clamp(m - 1, 0, 0.3) / 0.3;
+    const w = ease(seg(m, 0, 0.5)), rn = clamp(st.run || 0, 0, 1) * w; // rn: run blend
     const cp = (1 - w) * (1 - act) * P.contra, rs = H.relax;
     const sp = (P.splay || 0) * (1 - w);
     const c = fx.crouch;
     // walk: stance foot planted, sliding back exactly half a stride under the hip; swing foot arcs forward and up
     const Ls = P.stride, pL = (((ph - PI / 2) % (2 * PI)) + 2 * PI) % (2 * PI);
-    const hipW = P.aY + P.walkH0 + walkBob(P, pL % PI) * (1 + 0.3 * run) - c * 6;
-    const yaw = Math.cos(pL) * 0.07 * w; // slight pelvis yaw into the stride
+    // run: stance takes P.runDuty of the cycle, so both feet leave the ground in between (flight, body highest)
+    const beta = P.runDuty, sr = 2 * PI * beta;
+    const hipW = lerp(P.aY + P.walkH0 + walkBob(P, pL % PI), P.aY + P.runH0 - P.runBob * Math.cos(2 * (pL - PI * beta)), rn) - c * 6;
+    const yaw = Math.cos(pL) * lerp(0.07, 0.1, rn) * w; // slight pelvis yaw into the stride
+    // aim extra: kneel on the right knee (knee on the floor, foot tucked up behind on its toes), left foot planted ahead
+    const kneel = H.kneel || 0, hipK = P.legW * 0.62 + 1.2 + P.thigh * Math.cos(0.12);
+    // both legs by IK while kneeling: the hip sinks, the right ankle travels to its tucked spot, the left foot slides ahead
+    const kE = clamp(kneel * 12, 0, 1), hipNow = lerp(P.hipY, hipK, kneel);
+    const zK = -(P.thigh * Math.sin(0.12) + P.shin * Math.sin(1.87)), yK = hipK - P.thigh * Math.cos(0.12) - P.shin * Math.cos(1.87);
     const L = {};
     for (const s of [-1, 1]) {
       // idle pose (neutral when not in contrapposto)
@@ -1420,13 +1544,28 @@
         else {
           const q = (p - PI) / PI;
           z = -Ls / 4 + (Ls / 2) * (1 - Math.cos(PI * q)) / 2;
-          lift = P.walkLift * (1 + 0.4 * run) * Math.sin(PI * Math.pow(q, 0.85));
+          lift = P.walkLift * Math.sin(PI * Math.pow(q, 0.85));
           toe = 0.3 * Math.sin(PI * q);
+        }
+        if (rn > 0) { // run: planted over a shorter stance, then heel kicks back, knee drives high, foot reaches forward
+          let zr, lr = 0, tr = 0;
+          if (p < sr) zr = Ls * beta / 2 - Ls * beta * (p / sr);
+          else {
+            const q = (p - sr) / (2 * PI - sr);
+            zr = -Ls * beta / 2 + Ls * beta * (1 - Math.cos(PI * q)) / 2 - P.runE * Math.sin(2 * PI * q) * 0.6;
+            lr = P.runLift * Math.pow(Math.sin(PI * q), 0.7);
+            tr = 0.45 * Math.sin(PI * q);
+          }
+          z = lerp(z, zr, rn); lift = lerp(lift, lr, rn); toe = lerp(toe, tr, rn);
         }
         // the yawed pelvis moves the hip joint forward/back; aim from the hip, and counter-yaw the leg so the
         // planted foot stays still and points straight ahead
         const [hw, kw] = legIK(P, z + s * P.hipX * Math.sin(yaw), hipW - P.aY - lift);
         h = lerp(h, hw, w); kn = lerp(kn, kw, w); hy = hy * (1 - w) - yaw; toe *= w;
+      }
+      if (kneel > 0) {
+        const [hk, kk] = s > 0 ? legIK(P, P.thigh * 0.62 * kneel, hipNow - P.aY) : legIK(P, zK * kneel, hipNow - lerp(P.aY, yK, kneel));
+        h = lerp(h, hk, kE); kn = lerp(kn, kk, kE); toe = lerp(toe, s > 0 ? 0 : 1.15 * kneel, kE); hy *= 1 - kE;
       }
       const hip = n['hip' + s].rot; hip[0] = h; hip[1] = hy;
       n['knee' + s].rot[0] = kn;
@@ -1440,7 +1579,7 @@
     // swing side
     const st0 = -rs;
     const dX = L[st0].x - L[rs].x, dY = L[st0].y - L[rs].y;
-    const roll = (cp > 0 ? Math.atan(-dY / dX) * (1 - w) : 0) - Math.sin(pL) * 0.02 * w;
+    const roll = ((cp > 0 ? Math.atan(-dY / dX) * (1 - w) : 0) - Math.sin(pL) * 0.02 * w) * (1 - kE);
     let top = -1e9;
     const Rr = eulerM([0, 0, roll]);
     for (const s of [-1, 1]) {
@@ -1451,19 +1590,217 @@
       const e = toEuler(mulT(chain, eulerM([l.toe, l.hy + yaw, 0])));
       const a = n['ankle' + s].rot; a[0] = e[0]; a[1] = e[1]; a[2] = e[2];
     }
-    n.pelvis.pos[1] = (P.aY + top) * k;
+    n.pelvis.pos[1] = lerp(lerp(P.aY + top, hipW, rn), hipNow, kE) * k; // running: the hip path rules, so the body can leave the ground
     // slight pelvis yaw into the stride, shoulders counter-rotating; small shoulder roll; head kept level
     n.pelvis.rot[1] = yaw;
     n.pelvis.rot[2] = roll;
     const ch = n.chest;
-    ch.rot[0] = P.lean + fx.lean + P.walkLean * w * (1 + run) + breath * 0.012 * idle;
+    const bodyLean = P.lean + fx.lean + P.walkLean * w + rn * P.runLean;
+    ch.rot[0] = bodyLean + breath * 0.012 * idle;
     ch.rot[1] = -n.pelvis.rot[1] * 1.6 + fx.twist + rs * 0.06 * cp;
     ch.rot[2] = -roll * (1.7 * (1 - w) + 0.6 * w);
     if (n.head) {
-      n.head.rot[0] = -(P.lean + fx.lean + P.walkLean * m1) * 0.9 + fx.headPitch + breath * 0.01 * idle;
+      n.head.rot[0] = -bodyLean * 0.9 + fx.headPitch + breath * 0.01 * idle;
       n.head.rot[1] = -fx.twist * 0.5 - ch.rot[1] * 0.4;
       n.head.rot[2] = -(ch.rot[2] + roll) * 0.9;
     }
+  }
+
+  // ------------------------------------------------------------- reactions: hit, death (see docs/ARCHITECTURE.md)
+  // Everything is a pure function of the state (st.hit, st.death, st.act): effects and props are built once at rig
+  // build time, hidden, and driven by time. Effects hang off the root so they stay in world space; the body's own
+  // nodes do the falling. hitDir: the angle the hit comes from in unit space (0 = from the front, +z).
+  const DEATHS = ['collapse', 'dismember', 'gib'];
+  const IDLE_ST = { phase: 0, move: 0, t: 0, fire: 0, fireN: 0, run: 0, hit: null, hitDir: 0, death: null, act: null };
+  const GRAV = 150; // px/s^2, same as the blood and gib particles
+  function renameTree(node, prefix) { for (const c of node.children) { c.name = prefix + c.name; renameTree(c, prefix); } }
+  function primLow(p) { // lowest world y of a prim's bounding box (conservative)
+    const w = p.world; let lo = 1e9;
+    for (let i = 0; i < 8; i++) { const x = i & 1 ? p.hx : -p.hx, y = i & 2 ? p.hy : -p.hy, z = i & 4 ? p.hz : -p.hz; lo = Math.min(lo, w[3] * x + w[4] * y + w[5] * z + w[10]); }
+    return lo;
+  }
+
+  function reactionSetup(ctx, H) {
+    const { P } = H, root = ctx.root, info = ctx.info, k = ctx.k, FX = MF.FX;
+    const [W, Ht, D] = P.chest;
+    const chestY = P.hipY + 1.5 + Ht * 0.6, neckY = P.hipY + 1.5 + Ht;
+    H.pre = { crouch: 0, lean: 0, twist: 0, head: 0, limp: 0, drop: {} };
+    info.customHit = true;
+    info.deaths = DEATHS.slice();
+    const keys = H.weapons.map((w) => w.key);
+    const ex = [];
+    if (keys.some((q) => q === 'mg' || q === 'rifle' || q === 'pistol' || q === 'flamer')) ex.push('reload');
+    if (!H.sd && keys.includes('rifle')) ex.push('aim');
+    if (keys.some((q) => q === 'shield' || q === 'greatsword' || q === 'sword' || q === 'dagger')) ex.push('block');
+    info.extras = ex;
+    H.blocker = keys.includes('shield') ? 'shield' : ['greatsword', 'sword', 'dagger'].find((q) => keys.includes(q)) || null;
+    Object.assign(info.dur, { hit: 0.45, death: 3.2, reload: 1.4, aim: 2.0, block: 1.2 });
+    const R = H.R = { chestY, neckY };
+    // hit: a spurt on a pivot that turns to face the hit
+    R.hitPivot = root.child('fx_hitPivot');
+    R.hit = FX.hitBlood(R.hitPivot, { name: 'hb', origin: [0, chestY, D * 0.5 + 1], dir: [0, 0.35, 1], seed: 5 });
+    // deaths
+    R.fx = {
+      collapse: FX.group([
+        FX.bloodBurst(root, { name: 'dcA', origin: [0, chestY, 0], dir: [0, 0.45, -1], seed: 11, scale: 1.4, pool: false }),
+        FX.burst(root, 'dcM', { kind: 'mist', count: 10, origin: [0, chestY, 1], dir: [0, 0.3, 1], spread: 0.5, seed: 13 }),
+        FX.burst(root, 'dcC', { kind: 'blood', count: 14, origin: [0, chestY, -1], dir: [0, 0.5, -1], spread: 0.7, seed: 14, size: [1.4, 2.4] }), // chunky exit wound
+        FX.bloodBurst(root, { name: 'dcB', origin: [0, 4, 0], dir: [0, 0.8, 0], seed: 12, start: 1.1, scale: 0.8, pool: false }),
+      ]),
+      dismember: FX.group([
+        FX.bloodBurst(root, { name: 'ddA', origin: [0, neckY, 0], dir: [0, 1, 0.1], seed: 21, scale: 1.4, start: 0.08, pool: false }),
+        FX.bloodBurst(root, { name: 'ddB', origin: [0, neckY, 0], dir: [0.15, 1, -0.15], seed: 22, scale: 1.1, start: 0.45, pool: false }),
+        FX.burst(root, 'ddK', { kind: 'blood', count: 16, origin: [0, neckY, 0], dir: [0, 1, 0], spread: 0.6, seed: 24, start: 0.1, stagger: 0.5, size: [1.4, 2.4] }), // pumping fountain
+        FX.bloodBurst(root, { name: 'ddC', origin: [0, 4, 0], dir: [0, 0.8, 0], seed: 23, start: 1.35, scale: 0.7, pool: false }),
+      ]),
+      gib: FX.group([ // blown apart: armour and flesh chunks, a red mist, a flash of fire and smoke, a wide pool
+        FX.burst(root, 'dgL', { kind: 'flash', count: 1, origin: [0, chestY * 0.8, 0], dir: [0, 1, 0], spread: 0, seed: 30, start: 0.02, stagger: 0, scale: 0.7 }),
+        FX.gibs(root, { name: 'dg', origin: [0, chestY * 0.8, 0], seed: 31, scale: 1.5, count: 16, mats: ['primary', 'metal', 'skin', 'leather'], start: 0.02 }),
+        FX.burst(root, 'dgA', { kind: 'debris', count: 10, start: 0.02, origin: [0, chestY, 0], dir: [0, 1, 0], spread: 1.3, mats: ['metal', 'primary', 'secondary'], seed: 32 }),
+        FX.burst(root, 'dgF', { kind: 'fire', count: 5, origin: [0, chestY * 0.8, 0], dir: [0, 0.6, 0], spread: 1.1, seed: 33, scale: 0.6 }),
+        FX.burst(root, 'dgS', { kind: 'smoke', count: 5, origin: [0, chestY * 0.8, 0], dir: [0, 1, 0], spread: 0.8, seed: 34, start: 0.1, stagger: 0.4, scale: 0.7 }),
+        FX.burst(root, 'dgM', { kind: 'mist', count: 24, origin: [0, chestY * 0.8, 0], dir: [0, 0.5, 0], spread: 1.2, seed: 35, start: 0.02, scale: 1.5 }),
+      ]),
+    };
+    // blood pools under where the chest comes to rest (forward or backward fall)
+    R.pool = { 1: FX.pool(root, 'dpF', { origin: [0, 0, Ht * 0.75], radius: 15, seed: 3, start: 0.9, grow: 2.2, blobs: 7 }),
+      [-1]: FX.pool(root, 'dpB', { origin: [0, 0, -Ht * 0.75], radius: 15, seed: 4, start: 0.9, grow: 2.2, blobs: 7 }) };
+    // a severed-head prop (a copy of the head) and a dropped copy of each weapon
+    R.sev = root.child('sevRoot'); R.sev.startHidden = true;
+    const hn = buildHead(ctx, H, R.sev);
+    hn.base.pos = [0, 0, 0]; hn.base.rot = [0, 0, 0]; hn.pos = [0, 0, 0]; hn.rot = [0, 0, 0];
+    renameTree(R.sev, 'sev_');
+    R.drop = {};
+    for (const w of H.weapons) {
+      const dn = root.child('drop' + w.s); dn.startHidden = true;
+      MF.setBuildScale(k * P.ws);
+      H.buildingProp = true;
+      try { w.def.build(ctx, dn, w.s, w.key, H); } finally { MF.setBuildScale(k); H.buildingProp = false; }
+      renameTree(dn, 'drop_');
+      R.drop[w.s] = { node: dn, s: w.s, fin: [0, w.s * 0.7 + 0.3, PI / 2] };
+    }
+    R.sevFin = [0.35, 0.9, PI / 2];
+  }
+
+  // Measure the rig at build time: where the weapons and the head start (idle pose), and how far each final death
+  // pose must be lifted so nothing sinks under the floor.
+  function reactionCalibrate(ctx, H) {
+    const root = ctx.root, R = H.R;
+    const nodes = MF.findNodes(root);
+    const anim = ctx.anims[ctx.anims.length - 1];
+    const pose = (st) => { root.reset(); anim(Object.assign({}, IDLE_ST, st), nodes); return MF.updateRig(root, MF.mat(), []); };
+    pose({});
+    for (const s in R.drop) { const g = nodes['grip' + s].world; R.drop[s].start = { p: [g[9], g[10], g[11]], rot: toEuler(g) }; }
+    const hw = nodes.head.world; R.neck = { p: [hw[9], hw[10], hw[11]], rot: toEuler(hw) };
+    const body = new Set(); (function walk(nd) { body.add(nd); nd.children.forEach(walk); })(nodes.pelvis);
+    R.settle = {};
+    for (const type of ['collapse', 'dismember']) for (const dir of [1, -1]) {
+      let lo = 1e9;
+      for (const p of pose({ death: 20, deathType: type, deathSeed: dir > 0 ? 1 : 0 })) if (body.has(p.node)) lo = Math.min(lo, primLow(p));
+      R.settle[type + dir] = 0.15 * ctx.k - lo;
+    }
+    const restY = (nd, rot) => { // lowest point of a prop lying at rotation rot with its origin at y = 0
+      root.reset(); nd.hidden = false; nd.pos[0] = nd.pos[1] = nd.pos[2] = 0; nd.rot[0] = rot[0]; nd.rot[1] = rot[1]; nd.rot[2] = rot[2];
+      let lo = 1e9; for (const p of MF.updateRig(nd, MF.mat(), [])) lo = Math.min(lo, primLow(p));
+      return 0.1 * ctx.k - lo;
+    };
+    for (const s in R.drop) R.drop[s].restY = restY(R.drop[s].node, R.drop[s].fin);
+    R.sevRest = restY(R.sev, R.sevFin);
+    root.reset();
+  }
+
+  function reactPre(st, n, H) {
+    const pre = H.pre, R = H.R;
+    pre.crouch = 0; pre.lean = 0; pre.twist = 0; pre.head = 0; pre.limp = 0; pre.drop[-1] = pre.drop[1] = false;
+    if (st.death != null && st.death >= 0) {
+      const t = st.death, type = DEATHS.includes(st.deathType) ? st.deathType : 'collapse';
+      if (type === 'gib') return;
+      const dir = (st.deathSeed | 0) % 2 ? 1 : -1, dm = type === 'dismember';
+      const T = deathTimes(type);
+      const rec = ease(seg(t, 0, 0.12)) * (1 - ease(seg(t, 0.12, 0.5)));
+      const buckle = ease(seg(t, T.b0, T.b1)), fall = Math.pow(seg(t, T.f0, T.f1), 2);
+      pre.crouch = 0.75 * buckle * (1 - 0.85 * fall);
+      pre.lean = -0.35 * rec + (dir > 0 ? 0.25 : -0.3) * buckle;
+      pre.head = dm ? 0 : 0.3 * rec;
+      pre.limp = ease(seg(t, T.r, T.r + 0.35));
+      pre.drop[-1] = pre.drop[1] = t >= T.r;
+      return;
+    }
+    if (st.hit != null && st.hit >= 0) { // flinch away from the hit
+      const e = hitEnv(st.hit), th = st.hitDir || 0;
+      pre.lean -= Math.cos(th) * 0.35 * e;
+      pre.twist += Math.sin(th) * 0.3 * e;
+      pre.head -= Math.cos(th) * 0.3 * hitEnv(st.hit - 0.05);
+    }
+  }
+  const hitEnv = (t) => (t < 0 ? 0 : t < 0.05 ? t / 0.05 : Math.pow(clamp(1 - (t - 0.05) / 0.4, 0, 1), 2));
+  const deathTimes = (type) => (type === 'dismember' ? { b0: 0.35, b1: 0.85, f0: 0.8, f1: 1.35, r: 0.3 } : { b0: 0.15, b1: 0.6, f0: 0.55, f1: 1.05, r: 0.35 });
+
+  function reactPost(st, n, H) {
+    const R = H.R, k = H.k, P = H.P;
+    if (st.death != null && st.death >= 0) {
+      const t = st.death, type = DEATHS.includes(st.deathType) ? st.deathType : 'collapse';
+      const dir = type === 'gib' ? 1 : (st.deathSeed | 0) % 2 ? 1 : -1;
+      R.fx[type].update(t);
+      if (type === 'gib') { // blown apart a beat after the flash; the weapon is flung clear
+        if (t >= 0.04) n.pelvis.hidden = true;
+        for (const s in R.drop) if (t >= 0.04) { n['grip' + s].hidden = true; dropProp(R.drop[s], t - 0.04, [s * 18, 34, 8], [9, 7, 5], k); }
+        return;
+      }
+      const T = deathTimes(type), fall = Math.pow(seg(t, T.f0, T.f1), 2);
+      const land = seg(t, T.f1, T.f1 + 0.3), bounce = Math.sin(land * PI) * (1 - land) * 0.9;
+      n.pelvis.rot[0] += dir * 1.48 * fall;
+      n.pelvis.pos[2] += dir * P.chest[1] * 0.3 * k * fall;
+      n.pelvis.pos[1] += ((R.settle[type + dir] || 0) + bounce * k) * fall;
+      if (n.head) { n.head.rot[0] += dir * 0.35 * fall; n.head.rot[2] += 0.25 * fall; }
+      R.pool[dir].update(t);
+      for (const s in R.drop) if (t >= T.r) { n['grip' + s].hidden = true; dropProp(R.drop[s], t - T.r, [s * 7, 5, dir * 6], null, k); }
+      if (type === 'dismember' && t >= 0.08) { // the head comes off and flies, spinning, then rolls to a stop
+        n.head.hidden = true;
+        flyProp(R.sev, R.neck, R.sevRest, R.sevFin, t - 0.08, [((st.deathSeed | 0) % 3 === 0 ? -1 : 1) * 16, 34, -dir * 20], [14, 6, 9], k);
+      }
+      // keep the falling body on the floor: pose it, find its lowest point, lift by any penetration (pure translation)
+      if (t > T.b0) {
+        let lo = 1e9;
+        for (const q of MF.updateRig(n.pelvis, MF.mat(), [])) lo = Math.min(lo, primLow(q));
+        if (lo < 0) n.pelvis.pos[1] -= lo;
+      }
+      return;
+    }
+    if (st.hit != null && st.hit >= 0) {
+      const th = st.hitDir || 0, e = hitEnv(st.hit), e2 = hitEnv(st.hit - 0.05);
+      const sx = Math.sin(th), sz = Math.cos(th);
+      n.chest.rot[2] += sx * 0.25 * e;
+      if (n.head) n.head.rot[2] += sx * 0.3 * e2;
+      n.pelvis.pos[0] -= sx * 1.2 * e * k; n.pelvis.pos[2] -= sz * 1.2 * e * k; // a small step back
+      R.hitPivot.rot[1] = th;
+      R.hit.update(st.hit);
+    }
+  }
+  // a dropped weapon: tumbles from where the hand held it and comes to rest flat on the floor
+  function dropProp(d, tau, v, spin, k) {
+    if (tau < 0) return;
+    flyProp(d.node, d.start, d.restY, d.fin, tau, v, spin || [0, 0, 0], k);
+  }
+  // ballistic prop: start {p (scaled), rot}, lands at y = restY (scaled) and eases into the resting rotation fin
+  function flyProp(nd, start, restY, fin, tau, v, spin, kk) {
+    if (tau < 0 || restY == null) return;
+    const k = kk;
+    nd.hidden = false;
+    const g = GRAV * k, vy = v[1] * k, y0 = start.p[1];
+    const tl = Math.max(0.05, (vy + Math.sqrt(Math.max(0, vy * vy + 2 * g * (y0 - restY)))) / g);
+    const tc = Math.min(tau, tl), after = Math.max(0, tau - tl);
+    const roll = Math.min(after, 0.3) * 0.35;
+    nd.pos[0] = start.p[0] + v[0] * k * (tc + roll);
+    nd.pos[2] = start.p[2] + v[2] * k * (tc + roll);
+    nd.pos[1] = tau >= tl ? restY : y0 + vy * tc - 0.5 * g * tc * tc;
+    // tumble, but be lying in the resting orientation by two thirds of the flight so it lands flat
+    const u = tc / tl, flat = ease(clamp(u * 1.5, 0, 1));
+    for (let i = 0; i < 3; i++) nd.rot[i] = lerp(start.rot[i] + spin[i] * tc, fin[i], flat);
+    // long props (a greatsword) tumbling low: never let a tip dip under the floor
+    let lo = 1e9;
+    for (const q of MF.updateRig(nd, MF.mat(), [])) lo = Math.min(lo, primLow(q));
+    if (lo < 0) nd.pos[1] -= lo;
   }
 
   // ------------------------------------------------------------- random + registration
