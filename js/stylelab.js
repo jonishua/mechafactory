@@ -172,13 +172,21 @@
     if (fireNow) nextAttack = t + 1.7;
     let yaw = +facing.value;
     if (mode === 'turn') yaw = Math.floor(t / 0.6) * (TAU / 8);
+    // hit / death / action modes loop on fixed cycles so every unit shows its variants in turn
+    const cycle = (len) => ({ n: Math.floor(t / len), tt: t % len });
     for (const row of rows) {
       const scene = [];
       for (const u of row.units) {
         if (fireNow) { u.fire = 1; u.fireN++; }
         if (u.fire > 0) u.fire = Math.max(0, u.fire - dt * (u.rig.fireDecay || 5));
-        const walking = mode === 'walk';
-        u.rig.animate({ phase: walking ? t * TAU * 1.15 : 0, move: walking ? 1 : 0, t, fire: u.fire, fireN: u.fireN });
+        const info = u.rig.info || { deaths: [], extras: [], dur: {} };
+        const walking = mode === 'walk' || mode === 'run';
+        const st = { phase: walking ? t * TAU * (mode === 'run' ? 1.6 : 1.15) : 0, move: walking ? 1 : 0, run: mode === 'run' ? 1 : 0, t, fire: u.fire, fireN: u.fireN,
+          hit: null, hitN: 0, hitDir: 0, death: null, deathType: null, deathSeed: 3, act: null };
+        if (mode === 'hit') { const c = cycle(1.4); st.hit = c.tt; st.hitN = c.n; st.hitDir = (c.n % 4) * (TAU / 4); }
+        if (mode === 'death' && info.deaths.length) { const c = cycle((info.dur.death || 3) + 1.5); st.death = c.tt; st.deathType = info.deaths[c.n % info.deaths.length]; }
+        if (mode === 'action' && info.extras.length) { const c = cycle((Math.max(...info.extras.map((e) => info.dur[e] || 1.2))) + 0.8); st.act = { name: info.extras[c.n % info.extras.length], t: c.tt }; }
+        u.rig.animate(st);
         const w = MF.matFromEuler(MF.mat(), Math.round(u.x), u.rig.hover || 0, 0, 0, yaw, 0);
         scene.push({ prims: MF.updateRig(u.rig.root, w, []), pal: u.pal, x: Math.round(u.x), z: 0, radius: u.rig.radius, height: u.rig.height + (u.rig.hover || 0) });
       }
