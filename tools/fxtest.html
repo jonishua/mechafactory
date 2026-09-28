@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#222}canvas{image-rendering:pixelated;display:block}</style></head><body>
+<canvas id="c"></canvas>
+<script src="../js/core.js"></script><script src="../js/render.js"></script><script src="../js/fx.js"></script>
+<script>
+// Dev harness: effects presets sampled over time (rows: blood burst, gibs, explosion; columns: time).
+const times = [0.05, 0.15, 0.3, 0.5, 0.8, 1.3, 2.0, 3.0];
+const CW = 90, CH = 80, zoom = 3;
+const cv = document.getElementById('c'); cv.width = CW * times.length * zoom; cv.height = CH * 3 * zoom;
+const ctx = cv.getContext('2d'); ctx.imageSmoothingEnabled = false;
+const R = new MF.Renderer(CW, CH), tmp = document.createElement('canvas'); tmp.width = CW; tmp.height = CH;
+const pal = MF.buildPalette(Object.assign({}, MF.PALETTES['Snowcat'], { bg: '#2a2830', floor: '#34313a', skin: '#c98d64' }));
+const rows = [
+  (root) => MF.FX.bloodBurst(root, { origin: [0, 20, 0], dir: [0.3, 0.8, -0.4], seed: 3 }),
+  (root) => MF.FX.gibs(root, { origin: [0, 18, 0], seed: 5 }),
+  (root) => MF.FX.explosion(root, { origin: [0, 22, 0], seed: 9 }),
+];
+rows.forEach((make, ri) => {
+  const root = new MF.Node('root');
+  MF.setBuildScale(1);
+  const fx = make(root);
+  times.forEach((t, ci) => {
+    root.reset(); fx.update(t);
+    const prims = MF.updateRig(root, MF.mat(), []);
+    R.render({ units: [{ prims, pal, x: 0, z: 0, radius: 30, height: 40 }], cam: { x: 0, z: 0, pitch: 0.55, ox: CW / 2, oy: CH - 16 }, floor: 'plain', bg: pal.bg, floorRamp: pal.floor, look: 'dusk', time: t });
+    tmp.getContext('2d').putImageData(R.image, 0, 0);
+    ctx.drawImage(tmp, ci * CW * zoom, ri * CH * zoom, CW * zoom, CH * zoom);
+    ctx.fillStyle = '#fff'; ctx.font = '11px monospace'; ctx.fillText(t + 's', ci * CW * zoom + 4, ri * CH * zoom + 12);
+  });
+});
+document.title = 'done';
+</script></body></html>

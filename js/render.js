@@ -239,6 +239,10 @@
           const lum = nwx * Lx + nwy * Ly + nwz * Lz;
           const matName = p.mat;
           const ramp = pal.pack[matName] || pal.pack.primary;
+          if (matName === 'fire' || matName === 'spark') { // emissive effects: flames, muzzle fire, sparks
+            color[ix] = pal.pack.fire[matName === 'spark' ? 4 : lum > 0.45 ? 4 : lum > -0.1 ? 3 : 2];
+            continue;
+          }
           if (matName === 'accent' || matName === 'lamp') {
             // emissive: flat bright, subtle pulse
             let e = lum > 0.2 ? 4 : 3;
@@ -292,14 +296,16 @@
           if (pi < 0) {
             // silhouette: any neighbour with geometry?
             let nb = -1;
-            if (X > 0 && primIx[ix - 1] >= 0) nb = ix - 1;
-            else if (X < W - 1 && primIx[ix + 1] >= 0) nb = ix + 1;
-            else if (Y > 0 && primIx[ix - W] >= 0) nb = ix - W;
-            else if (Y < H - 1 && primIx[ix + W] >= 0) nb = ix + W;
+            const geo = (j) => primIx[j] >= 0 && !prims[primIx[j]].noOutline;
+            if (X > 0 && geo(ix - 1)) nb = ix - 1;
+            else if (X < W - 1 && geo(ix + 1)) nb = ix + 1;
+            else if (Y > 0 && geo(ix - W)) nb = ix - W;
+            else if (Y < H - 1 && geo(ix + W)) nb = ix + W;
             if (nb >= 0) { out[ix] = units[unitIx[nb]].pal.outline; om[ix] = 1; unitIx[ix] = unitIx[nb]; }
             else out[ix] = transparent ? (floorShade[ix] === 1 ? scene.shadowPacked || 0x55000000 : 0) : color[ix];
             continue;
           }
+          if (prims[pi].noOutline) { out[ix] = color[ix]; continue; }
           const d = depth[ix];
           let line = false, far = false;
           if (X > 0 && primIx[ix - 1] >= 0 && primIx[ix - 1] !== pi && depth[ix - 1] < d - thr) { line = true; if (depth[ix - 1] < d - thr * 4) far = true; }

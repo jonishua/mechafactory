@@ -55,12 +55,35 @@ Next steps:
 
 ## 5. Animation contract
 
-Animators receive `st = { phase, move, t, fire, fireN }`:
+Every rig's animators receive one state object each frame (built by `animState()` in `js/app.js`, and sampled per frame by the sprite export):
 
-- `phase`: the walk phase in radians. It advances with the distance walked, using the rig's `stride`.
-- `move`: the 0..1 walk blend.
-- `t`: time in seconds.
-- `fire`: jumps to 1 on attack and decays at the rig's `fireDecay` per second.
-- `fireN`: counts attacks, so weapons can alternate hands.
+| Field | Meaning |
+| --- | --- |
+| `phase` | Walk phase in radians. It advances with distance walked, so one cycle equals the rig's `stride`. |
+| `move` | 0..1 walk blend. |
+| `run` | 0..1 run blend (Shift). The ground speed is 1.8×. |
+| `t` | Time in seconds, for idle life. |
+| `fire`, `fireN` | Attack. `fire` jumps to 1 and decays at `rig.fireDecay` per second. `fireN` counts attacks, for alternating hands. |
+| `hit`, `hitN`, `hitDir` | Seconds since the last hit (`null` if none), a hit counter, and the direction the hit came from (radians, unit-local). |
+| `death`, `deathType`, `deathSeed` | Seconds since death (`null` while alive), which death variant, and a per-unit seed. |
+| `act` | `{ name, t }` for an extra action (`reload`, `aim`, `block`, `cast`), with `t` in seconds since it started, or `null`. |
 
-New animations (death, hit, special) should follow the same pattern: a state value that the export can sample into frames.
+Each rig declares what it supports in `ctx.info` (exposed as `rig.info`):
+
+```js
+ctx.info.deaths = ['collapse', 'dismember', 'gib'];   // variants the K key cycles through and the export bakes
+ctx.info.extras = ['reload', 'aim'];                  // actions the E key cycles through and the export bakes
+ctx.info.dur = { hit: 0.45, death: 3, reload: 1.3, aim: 1.6, block: 1.1 };   // seconds; the export samples these
+ctx.info.customHit = true;                            // set when the line animates its own hit reaction
+```
+
+If a line declares no deaths and no custom hit, `addFallbackReactions()` in `js/mechgen.js` adds generic ones: humans bleed and topple, mechs spark and explode.
+
+### Effects (`js/fx.js`)
+`MF.FX` builds effects out of real prims parented to the rig. Every effect is deterministic in time: `fx.update(seconds)`. Presets are `bloodBurst`, `gibs`, `explosion`, `hitBlood`, `hitSparks` and `smokeTrail`. The building blocks are `burst` (particle kinds: `blood`, `mist`, `gib`, `debris`, `spark`, `fire`, `flash`, `smoke`, `ember`) and `pool` (floor decals: blood pools, scorch marks). The materials `blood`, `bloodDark`, `fire`, `spark`, `smoke` and `scorch` have their own colour ramps. `fire` and `spark` glow. Parent effects to the root and animate the body's own nodes, so effects stay in world space while the body falls.
+
+### Tone
+It's a battle game: deaths should be gruesome, like StarCraft II. Humans get blood sprays, dismemberment and gibbing, with pools of blood. Mechs get fireballs, secondary explosions, flying debris, sparks and smoking wrecks.
+
+### Sprite export
+Columns are grouped into named animations: `idle`, `walk`, `run`, `attack`, `hit`, `death_<variant>` for each death, and one per extra action. The JSON lists `animations: { name: { from, count, loop } }` and `durations`.

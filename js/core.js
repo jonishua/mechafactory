@@ -159,6 +159,12 @@
       hair: makeRamp(base.hair || '#3b2a26', { shift: 6 }),
       leather: makeRamp(base.leather || '#6e4a33', { shift: 7 }),
       tertiary: makeRamp(base.tertiary || '#b8323c', { shift: 7 }),
+      // effects: blood (editable per palette, e.g. green goblin blood), fire and smoke
+      blood: makeRamp(base.blood || '#7a1016', { shift: 5 }),
+      bloodDark: makeRamp(base.bloodDark || '#4a080d', { shift: 4 }),
+      scorch: makeRamp('#221f24', { shift: 3 }),
+      fire: [[120, 24, 18], [214, 64, 22], [255, 138, 36], [255, 206, 84], [255, 246, 196]],
+      smoke: makeRamp(base.smoke || '#6c6872', { shift: 4 }),
     };
     const pack = {};
     for (const k in ramps) pack[k] = ramps[k].map((c) => packRGBA(c[0], c[1], c[2]));
@@ -193,6 +199,7 @@
       this.mat = opts.mat || 'primary';
       this.detail = opts.detail || null;
       this.shadow = opts.shadow !== false;
+      this.noOutline = !!opts.noOutline; // tiny particles (blood drops, sparks) skip the 1px outline
       this.local = matFromEuler(mat(), ...(opts.at || [0, 0, 0]), ...(opts.rot || [0, 0, 0]));
       this.world = mat();
       this.node = null;
@@ -281,6 +288,7 @@
   // Build-time size multiplier: part dimensions and joint offsets scale, pixel-sized details don't.
   let K = 1;
   MF.setBuildScale = (k) => { K = k; };
+  MF.getBuildScale = () => K;
   const sc = (a) => (a ? a.map((v) => v * K) : a);
   function scaleOpts(o) {
     if (!o || K === 1) return o || {};

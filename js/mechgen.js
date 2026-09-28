@@ -97,10 +97,13 @@
     const e = bp.edge == null ? 1.5 : bp.edge;
     const mats = { mono: ['primary', 'primary', 'secondary'], split: ['primary', 'secondary', 'secondary'], inverse: ['secondary', 'secondary', 'primary'] }[bp.scheme || 'split'];
     const k = bp.size || 1;
-    const ctx = { bp, r, root, bulk, tall, legLen, armLen, e, k, A: mats[0], B: mats[1], T: mats[2], M: 'metal', anims: [], stride: 30, hover: 0, fireDecay: 5 };
+    // info: the animations this rig supports (see docs/ARCHITECTURE.md, "Animation contract")
+    const info = { deaths: [], extras: [], dur: { hit: 0.45, death: 3, reload: 1.3, aim: 1.6, block: 1.1, cast: 1.4 } };
+    const ctx = { bp, r, root, bulk, tall, legLen, armLen, e, k, A: mats[0], B: mats[1], T: mats[2], M: 'metal', anims: [], stride: 30, hover: 0, fireDecay: 5, info };
     MF.setBuildScale(k);
     try {
       lineOf(bp).build(ctx);
+      addFallbackReactions(ctx, lineOf(bp).group === 'Humans');
     } finally {
       MF.setBuildScale(1);
     }
@@ -116,12 +119,44 @@
     }
     const nodes = MF.findNodes(root);
     return {
-      root, nodes, height: maxY, radius: Math.max(10, rad), stride: ctx.stride, hover: ctx.hover, fireDecay: ctx.fireDecay,
+      root, nodes, height: maxY, radius: Math.max(10, rad), stride: ctx.stride, hover: ctx.hover, fireDecay: ctx.fireDecay, info: ctx.info,
       animate(st) {
         root.reset();
         for (const a of ctx.anims) a(st, nodes);
       },
     };
+  }
+
+  // Generic hit and death for any rig whose line doesn't provide its own (ctx.info.customHit / info.deaths).
+  // Humans bleed and topple; mechs spark, then burn and blow apart. Lines replace these with bespoke versions.
+  function addFallbackReactions(ctx, human) {
+    const { root, info } = ctx;
+    const chestY = 26 * (ctx.tall || 1) + 10;
+    // effects hang off the root; the body is every other top-level node, so tip those (not the root)
+    const bodyParts = () => root.children.filter((c) => !c.name.startsWith('fx_'));
+    const tip = (a, drop) => { for (const c of bodyParts()) { c.rot[0] -= a; c.pos[1] -= drop; } };
+    if (!info.customHit) {
+      const hfx = human ? MF.FX.hitBlood(root, { name: 'fbHit', origin: [0, chestY * 0.8, 3], dir: [0, 0.3, -1], seed: 3 })
+        : MF.FX.hitSparks(root, { name: 'fbHit', origin: [0, chestY, 4], dir: [0, 0.4, 1], seed: 3 });
+      ctx.anims.push((st) => {
+        if (st.hit == null || st.death != null) return;
+        const u = Math.max(0, 1 - st.hit / info.dur.hit);
+        tip(0.12 * u * u, 0); // knocked back
+        hfx.update(st.hit);
+      });
+    }
+    if (!info.deaths.length) {
+      info.deaths.push(human ? 'collapse' : 'explode');
+      const dfx = human ? MF.FX.bloodBurst(root, { name: 'fbDie', origin: [0, chestY * 0.7, 0], dir: [0, 0.6, -0.6], seed: 7, poolRadius: 8 })
+        : MF.FX.explosion(root, { name: 'fbDie', origin: [0, chestY, 0], seed: 7, scale: 1.2, start: 0.35 });
+      ctx.anims.push((st) => {
+        if (st.death == null) return;
+        const u = Math.min(1, st.death / (human ? 0.7 : 0.9));
+        const fall = u * u;
+        tip((human ? 1.3 : 0.45) * fall, (human ? 0.45 : 0.15) * chestY * ctx.k * fall); // topple backward
+        dfx.update(st.death);
+      });
+    }
   }
 
   // ------------------------------------------------------------- frames / locomotion

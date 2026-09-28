@@ -49,8 +49,18 @@
     return [Math.sin(a) * 0.62, 0.78, Math.cos(a) * 0.62];
   }
 
-  function posedPrims(u, x, z, yaw) {
-    u.rig.animate({ phase: u.phase, move: u.move, t: u.t, fire: u.fire || 0, fireN: u.fireN || 0 });
+  // The animation contract (docs/ARCHITECTURE.md): every rig reads the same state.
+  function animState(u) {
+    return {
+      phase: u.phase, move: u.move, t: u.t, fire: u.fire || 0, fireN: u.fireN || 0,
+      run: u.run || 0,
+      hit: u.hitT == null ? null : u.hitT, hitN: u.hitN || 0, hitDir: u.hitDir || 0,
+      death: u.deathT == null ? null : u.deathT, deathType: u.deathType || null, deathSeed: u.id,
+      act: u.act || null,
+    };
+  }
+  function posedPrims(u, x, z, yaw, st) {
+    u.rig.animate(st || animState(u));
     const w = MF.matFromEuler(MF.mat(), x, u.rig.hover || 0, z, 0, yaw, 0);
     return MF.updateRig(u.rig.root, w, []);
   }
@@ -140,10 +150,20 @@
     const trigger = k.has('Space');
     for (const u of S.units) {
       u.t += dt;
+      const info = u.rig.info || { dur: {} };
+      if (u.hitT != null) { u.hitT += dt; if (u.hitT > (info.dur.hit || 0.45) + 1.2) u.hitT = null; }
+      if (u.act) { u.act.t += dt; if (u.act.t > (info.dur[u.act.name] || 1.2)) u.act = null; }
+      if (u.deathT != null) {
+        u.deathT += dt;
+        u.move += (0 - u.move) * Math.min(1, dt * 9);
+        if (u.deathT > (info.dur.death || 3) + 3.5) { u.deathT = null; u.deathType = null; } // back on its feet after a while
+        continue;
+      }
       if (u.fire > 0) u.fire = Math.max(0, u.fire - dt * (u.rig.fireDecay || 5));
-      if (trigger && S.selected.has(u.id) && !(u.fire > 0.35)) { u.fire = 1; u.fireN = (u.fireN || 0) + 1; }
+      if (trigger && S.selected.has(u.id) && !(u.fire > 0.35) && !u.act) { u.fire = 1; u.fireN = (u.fireN || 0) + 1; }
       const sel = S.selected.has(u.id);
       const go = sel && moving;
+      u.run = (u.run || 0) + ((go && run ? 1 : 0) - (u.run || 0)) * Math.min(1, dt * 6);
       if (go) {
         let ty = Math.atan2(vx, vz);
         if (S.settings.snap) ty = Math.round(ty / (TAU / 8)) * (TAU / 8);
@@ -228,6 +248,9 @@
     else if (code === 'KeyN') deployCopy();
     else if (code === 'Delete' || code === 'Backspace') scrapSelected();
     else if (code === 'KeyL') lineUp();
+    else if (code === 'KeyH') hitSelected();
+    else if (code === 'KeyK') killSelected();
+    else if (code === 'KeyE') actSelected();
     else if (code === 'KeyP') openSnapshot();
   });
   window.addEventListener('keyup', (e) => S.keys.delete(e.code));
@@ -631,15 +654,14 @@
   }
 
   // ------------------------------------------------------------ export
-  function renderFrame(u, R2, yaw, phase, move, t, opts, fire = 0) {
-    const sp = u.phase, sm = u.move, st = u.t, sf = u.fire, sn = u.fireN;
-    u.phase = phase; u.move = move; u.t = t; u.fire = fire; u.fireN = 1;
-    const prims = posedPrims(u, 0, 0, yaw);
-    u.phase = sp; u.move = sm; u.t = st; u.fire = sf; u.fireN = sn;
+  // one frame for the export: st is a full animation state (see animState)
+  function renderFrame(u, R2, yaw, st, opts) {
+    const full = Object.assign({ phase: 0, move: 0, t: 0, fire: 0, fireN: 1, run: 0, hit: null, hitN: 1, hitDir: 0, death: null, deathType: null, deathSeed: 1, act: null }, st);
+    const prims = posedPrims(u, 0, 0, yaw, full);
     R2.render({
-      units: [{ prims, pal: u.pal, x: 0, z: 0, radius: u.rig.radius, height: u.rig.height + (u.rig.hover || 0) }],
+      units: [{ prims, pal: u.pal, x: 0, z: 0, radius: u.rig.radius * 1.8, height: u.rig.height + (u.rig.hover || 0) }],
       cam: { x: 0, z: 0, pitch: S.settings.pitch, ox: R2.w / 2, oy: Math.round(R2.h * 0.72) },
-      floor: 'none', shadows: opts.shadow, light: lightVec(), time: t, treadOffset: [phase * 3],
+      floor: 'none', shadows: opts.shadow, light: lightVec(), time: full.t, treadOffset: [full.phase * 3],
       shadowPacked: 0x66000000,
     });
     return new Uint32Array(R2.image.data.buffer.slice(0));
@@ -648,19 +670,28 @@
   // Columns: [idle] + walk frames + attack frames; rows: 8 directions.
   // cell 'auto' crops tight; a number gives fixed game cells with the feet at a constant anchor.
   function buildSheet(u, opts) {
-    const R2 = new MF.Renderer(240, 240);
+    const R2 = new MF.Renderer(260, 260);
     const footX = R2.w / 2, footY = Math.round(R2.h * 0.72);
-    const colDefs = [];
-    if (opts.idle) colDefs.push({ name: 'idle', phase: 0, move: 0, t: 0, fire: 0 });
-    for (let i = 0; i < opts.frames; i++) colDefs.push({ name: 'walk' + i, phase: (i / opts.frames) * TAU, move: 1, t: i * 0.1, fire: 0 });
-    for (let i = 0; i < opts.attack; i++) colDefs.push({ name: 'attack' + i, phase: 0, move: 0, t: 0.2 + i * 0.04, fire: 1 - i / opts.attack });
+    const info = u.rig.info || { deaths: [], extras: [], dur: {} };
+    const dur = Object.assign({ hit: 0.45, death: 3, reload: 1.3, aim: 1.6, block: 1.1, cast: 1.4 }, info.dur);
+    // columns, grouped into named animations
+    const colDefs = [], anims = {};
+    const group = (name, list, loop) => { anims[name] = { from: colDefs.length, count: list.length, loop: !!loop }; for (const [i, st] of list.entries()) colDefs.push({ name: name + i, st }); };
+    const seq = (n, f) => Array.from({ length: n }, (_, i) => f(i));
+    if (opts.idle) group('idle', [{ t: 0 }], true);
+    group('walk', seq(opts.frames, (i) => ({ phase: (i / opts.frames) * TAU, move: 1, t: i * 0.1 })), true);
+    if (opts.run) group('run', seq(opts.frames, (i) => ({ phase: (i / opts.frames) * TAU, move: 1, run: 1, t: i * 0.08 })), true);
+    if (opts.attack) group('attack', seq(opts.attack, (i) => ({ fire: 1 - i / opts.attack, t: 0.2 + i * 0.04 })));
+    if (opts.hit) group('hit', seq(4, (i) => ({ hit: (i / 4) * dur.hit, hitDir: 0, t: 0.3 })));
+    if (opts.death) for (const d of info.deaths) group('death_' + d, seq(opts.deathFrames, (i) => ({ death: (i / (opts.deathFrames - 1)) * dur.death, deathType: d, t: 0.3 })));
+    if (opts.extras) for (const e of info.extras) group(e, seq(6, (i) => ({ act: { name: e, t: (i / 6) * (dur[e] || 1.2) }, t: 0.3 })));
     const frames = [];
     let minX = 1e9, minY = 1e9, maxX = -1, maxY = -1;
     for (let d = 0; d < 8; d++) {
       const yaw = (d * TAU) / 8;
       const row = [];
       for (const c of colDefs) {
-        const px = renderFrame(u, R2, yaw, c.phase, c.move, c.t, opts, c.fire);
+        const px = renderFrame(u, R2, yaw, c.st, opts);
         for (let y = 0; y < R2.h; y++) for (let x = 0; x < R2.w; x++) if (px[y * R2.w + x] >>> 24) {
           if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
         }
@@ -708,11 +739,8 @@
     const meta = {
       name: u.bp.name, cellWidth: cw * opts.scale, cellHeight: ch * opts.scale, scale: opts.scale,
       rows: DIR_NAMES, columns: colDefs.map((c) => c.name),
-      animations: {
-        idle: opts.idle ? { from: 0, count: 1 } : null,
-        walk: { from: opts.idle ? 1 : 0, count: opts.frames, loop: true },
-        attack: opts.attack ? { from: (opts.idle ? 1 : 0) + opts.frames, count: opts.attack, loop: false } : null,
-      },
+      animations: anims,
+      durations: dur,
       anchor: { x: (footX - ox) * opts.scale, y: (footY - oy) * opts.scale },
       clipped,
       blueprint: u.bp,
@@ -720,7 +748,7 @@
     return { canvas: out, meta };
   }
 
-  const exportOpts = Object.assign({ frames: 8, attack: 4, cell: 'auto', scale: 1, idle: true, shadow: true }, store.get('exportOpts', {}));
+  const exportOpts = Object.assign({ frames: 8, attack: 4, cell: 'auto', scale: 1, idle: true, shadow: true, run: true, hit: true, death: true, deathFrames: 10, extras: true }, store.get('exportOpts', {}));
   function openExport() {
     const u = active();
     if (!u) return;
@@ -732,19 +760,24 @@
         <label>Attack frames <select class="select select-sm" id="exAttack">${[0, 3, 4, 6].map((n) => `<option ${n === exportOpts.attack ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label>Cell <select class="select select-sm" id="exCell">${['auto', '64', '96', '128'].map((n) => `<option value="${n}" ${String(exportOpts.cell) === n ? 'selected' : ''}>${n === 'auto' ? 'Tight crop' : n + '×' + n}</option>`).join('')}</select></label>
         <label>Scale <select class="select select-sm" id="exScale">${[1, 2, 3, 4].map((n) => `<option value="${n}" ${n === exportOpts.scale ? 'selected' : ''}>${n}×</option>`).join('')}</select></label>
-        <label><input type="checkbox" id="exIdle" ${exportOpts.idle ? 'checked' : ''}> Idle column</label>
+        <label><input type="checkbox" id="exIdle" ${exportOpts.idle ? 'checked' : ''}> Idle</label>
+        <label><input type="checkbox" id="exRun" ${exportOpts.run ? 'checked' : ''}> Run</label>
+        <label><input type="checkbox" id="exHit" ${exportOpts.hit ? 'checked' : ''}> Hit</label>
+        <label><input type="checkbox" id="exDeath" ${exportOpts.death ? 'checked' : ''}> Deaths</label>
+        <label><input type="checkbox" id="exExtras" ${exportOpts.extras ? 'checked' : ''}> Extras</label>
         <label><input type="checkbox" id="exShadow" ${exportOpts.shadow ? 'checked' : ''}> Drop shadow</label>
         <button class="btn btn-primary btn-sm" id="exPng">Download PNG</button>
         <button class="btn btn-sm" id="exJson">Download JSON</button>
       </div>
       <div class="sheet-view" id="sheetView"></div>
       <pre class="meta" id="exMeta"></pre>
-      <p class="hint">Rows run S, SE, E, NE, N, NW, W, SW. Columns: idle, walk loop, then the attack. Fixed cells keep the feet at the same anchor in every frame, ready for a game engine. If your browser blocks the download, right-click the sheet and choose “Save image as”.</p>`;
+      <p class="hint">Rows run S, SE, E, NE, N, NW, W, SW. Columns: idle, walk, run, attack, hit, each death variant and each extra action; the JSON lists every animation's frame range. Fixed cells keep the feet at the same anchor in every frame, ready for a game engine. If your browser blocks the download, right-click the sheet and choose “Save image as”.</p>`;
     let current = null;
     const redraw = () => {
       exportOpts.frames = +$('exFrames').value; exportOpts.scale = +$('exScale').value;
       exportOpts.attack = +$('exAttack').value; exportOpts.cell = $('exCell').value;
       exportOpts.idle = $('exIdle').checked; exportOpts.shadow = $('exShadow').checked;
+      exportOpts.run = $('exRun').checked; exportOpts.hit = $('exHit').checked; exportOpts.death = $('exDeath').checked; exportOpts.extras = $('exExtras').checked;
       store.set('exportOpts', exportOpts);
       current = buildSheet(u, exportOpts);
       const img = new Image();
@@ -756,7 +789,7 @@
       $('sheetView').appendChild(img);
       $('exMeta').textContent = `${current.canvas.width}×${current.canvas.height}px · cell ${current.meta.cellWidth}×${current.meta.cellHeight} · ${current.meta.columns.length} columns × 8 directions · feet anchor (${current.meta.anchor.x}, ${current.meta.anchor.y})${current.meta.clipped ? ' · this unit is bigger than the cell, so parts are clipped: pick a larger cell' : ''}`;
     };
-    ['exFrames', 'exAttack', 'exCell', 'exScale', 'exIdle', 'exShadow'].forEach((id) => $(id).addEventListener('change', redraw));
+    ['exFrames', 'exAttack', 'exCell', 'exScale', 'exIdle', 'exShadow', 'exRun', 'exHit', 'exDeath', 'exExtras'].forEach((id) => $(id).addEventListener('change', redraw));
     const slug = u.bp.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     $('exPng').addEventListener('click', () => download(current.canvas.toDataURL('image/png'), slug + '-sheet.png'));
     $('exJson').addEventListener('click', () => download('data:application/json,' + encodeURIComponent(JSON.stringify(current.meta, null, 2)), slug + '-sheet.json'));
@@ -790,6 +823,40 @@
     const a = document.createElement('a');
     a.href = href; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  // ------------------------------------------------------------ hit / death / actions
+  const selectedUnits = () => S.units.filter((u) => S.selected.has(u.id));
+  function hitSelected() {
+    for (const u of selectedUnits()) {
+      if (u.deathT != null) continue;
+      u.hitT = 0; u.hitN = (u.hitN || 0) + 1; u.hitDir = Math.random() * TAU;
+    }
+  }
+  // K kills (cycling through the rig's death variants); K on a dead unit brings it back
+  function killSelected() {
+    const names = [];
+    for (const u of selectedUnits()) {
+      if (u.deathT != null) { u.deathT = null; u.deathType = null; continue; }
+      const deaths = (u.rig.info && u.rig.info.deaths.length) ? u.rig.info.deaths : ['collapse'];
+      u.deathIx = ((u.deathIx == null ? -1 : u.deathIx) + 1) % deaths.length;
+      u.deathType = deaths[u.deathIx]; u.deathT = 0; u.fire = 0; u.act = null;
+      names.push(u.deathType);
+    }
+    if (names.length) toast('Death: ' + [...new Set(names)].join(', '));
+  }
+  // E plays the unit's extra actions in turn (reload, aim, block…)
+  function actSelected() {
+    const names = [];
+    for (const u of selectedUnits()) {
+      if (u.deathT != null) continue;
+      const ex = (u.rig.info && u.rig.info.extras) || [];
+      if (!ex.length) continue;
+      u.actIx = ((u.actIx == null ? -1 : u.actIx) + 1) % ex.length;
+      u.act = { name: ex[u.actIx], t: 0 };
+      names.push(ex[u.actIx]);
+    }
+    toast(names.length ? 'Action: ' + [...new Set(names)].join(', ') : 'No extra actions on this unit yet');
   }
 
   function lineUp() {
