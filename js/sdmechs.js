@@ -784,7 +784,7 @@
       const m = st.move || 0, ph = st.phase || 0, t = st.t || 0;
       const drop = Lleg * (1 - Math.cos(Aw * m * Math.sin(ph)));
       const stomp = m * 1.1 * Math.pow(Math.max(0, -Math.cos(2 * ph)), 6); // heavy footfall dip
-      const breathe = Math.sin(t * 2.2) * 0.35 * (1 - m);
+      const breathe = relaxed ? 0 : Math.sin(t * 2.2) * 0.35 * (1 - m); // relaxed styles breathe in the stance IK
       n.pelvis.pos[1] -= (drop + stomp + breathe) * k;
       n.pelvis.rot[1] += Math.sin(ph) * 0.08 * m;
       let hmin = 0, hmax = 0;
@@ -810,6 +810,56 @@
       n.torso.pos[1] += Math.sin(t * 2.2 + 0.6) * 0.25 * (1 - m) * k;
       n.head.rot[1] += Math.sin(t * 0.7) * (relaxed ? 0.22 : 0.32) * (1 - m) + Math.sin(ph) * 0.12 * m;
       if (!relaxed) n.head.rot[0] += Math.sin(t * 0.45) * 0.05 * (1 - m) - stomp * 0.05; // heroic heads stay level
+    });
+    if (relaxed) addStance(ctx, { thigh, shin, type, sF: WEAPONS[wR].shield && !WEAPONS[wL].shield ? -1 : 1 });
+  }
+
+  // Contrapposto idle for 'heroic' / 'frame': one foot a little forward, the other back, hips yawed toward
+  // the front foot, rolled and shifted onto the straighter back leg, torso counter-twisted, shoulders off
+  // level, arms asymmetric, plus a slow weight shift and breath. Both feet stay exactly planted and flat:
+  // a 2-bone IK re-solves each leg against the final pelvis transform (so attack lunges don't slide the
+  // feet either). Everything blends out as st.move rises so the walk starts cleanly. Pushed last.
+  function addStance(ctx, o) {
+    const k = ctx.k, sF = o.sF, T = o.thigh * k, S = o.shin * k;
+    MF.updateRig(ctx.root, MF.mat(), []);
+    const N = MF.findNodes(ctx.root);
+    const rest = {};
+    for (const s of [-1, 1]) { const a = N['ankle' + s].world; rest[s] = { hip: N['hipS' + s].pos.slice(), ank: [a[9], a[10], a[11]] }; }
+    const brace = o.type === 'brawler' || o.type === 'heavy' ? 1.25 : 1;
+    const M = MF.mat();
+    ctx.anims.push((st, n) => {
+      const m = Math.min(1, st.move || 0), t = st.t || 0;
+      const w = (1 - m) * (1 - m);
+      if (!(w > 0)) return;
+      const shift = Math.sin(t * 0.45), breath = 0.5 + 0.5 * Math.sin(t * 1.3);
+      const psi = -sF * 0.14 * w, rho = -sF * (0.05 + 0.012 * shift) * w;
+      const pel = n.pelvis;
+      pel.pos[0] += -sF * (0.9 + 0.35 * shift) * w * k; // weight onto the back leg
+      pel.pos[1] -= (1.0 * brace + 0.4 * breath) * w * k;
+      pel.pos[2] -= 0.4 * w * k;
+      pel.rot[1] += psi; pel.rot[2] += rho;
+      MF.matFromEuler(M, pel.pos[0], pel.pos[1], pel.pos[2], pel.rot[0], pel.rot[1], pel.rot[2]);
+      for (const s of [-1, 1]) {
+        const h = rest[s].hip, A = rest[s].ank;
+        const hx = M[0] * h[0] + M[1] * h[1] + M[2] * h[2] + M[9], hy = M[3] * h[0] + M[4] * h[1] + M[5] * h[2] + M[10], hz = M[6] * h[0] + M[7] * h[1] + M[8] * h[2] + M[11];
+        const wx = A[0] - hx, wy = A[1] - hy, wz = A[2] + (s === sF ? 7 : -5.5) * w * k - hz;
+        // into the pelvis frame (transpose of the rotation)
+        const vx = M[0] * wx + M[3] * wy + M[6] * wz, vy = M[1] * wx + M[4] * wy + M[7] * wz, vz = M[2] * wx + M[5] * wy + M[8] * wz;
+        const th = Math.atan2(vx, -vy), r = Math.hypot(vx, vy);
+        const cb = Math.max(-1, Math.min(1, (vz * vz + r * r - T * T - S * S) / (2 * T * S)));
+        const be = Math.acos(cb);
+        const al = Math.atan2(-vz, r) - Math.atan2(S * Math.sin(be), T + S * Math.cos(be));
+        const bl = (node, i, v) => { node.rot[i] += (v - node.rot[i]) * w; };
+        bl(n['hipS' + s], 2, th); bl(n['hip' + s], 0, al); bl(n['knee' + s], 0, be);
+        bl(n['ankle' + s], 0, -(al + be)); bl(n['foot' + s], 2, -(pel.rot[2] + th));
+      }
+      // upper body: counter-twist, shoulders off level, head kept level and roughly forward
+      n.torso.rot[1] -= psi * 1.4; n.torso.rot[2] -= rho * 1.6; n.torso.rot[0] += 0.02 * shift * w;
+      const glance = Math.pow(Math.max(0, Math.sin(t * 0.21 + 1)), 12) * 0.35 * sF;
+      n.head.rot[1] += (psi * 0.4 + glance) * w; n.head.rot[2] += rho * 0.6;
+      // arms asymmetric: the arm on the front-foot side sits back, the other a touch forward and more bent
+      n['sh' + sF].rot[0] += 0.09 * w; n['sh' + sF].rot[2] += sF * 0.03 * w;
+      n['sh' + -sF].rot[0] -= 0.07 * w; n['el' + -sF].rot[0] -= 0.12 * w;
     });
   }
 
