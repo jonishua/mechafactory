@@ -36,4 +36,4 @@ Implemented as `sdStyle: 'frame'` in `js/sdmechs.js` (the "Mech frame" line). It
 
 ## Still open
 - Sign-off on the blend and the frame direction, then roll the rules out to the remaining human roles (sniper, knight, heavy) and all mech archetypes.
-- Whether the modular line gets retired or restyled to the frame rules.
+- The modular line gets restyled to the frame rules (not retired) once the direction is locked.

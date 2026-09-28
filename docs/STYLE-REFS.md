@@ -43,3 +43,14 @@ Common rules drawn from these:
 - Military palettes, plus costume-driven "character" mechs (the corsair).
 
 This is implemented as the SD line's `sdStyle: 'frame'` ("Military frame").
+
+## Round 4: blend pick
+- Humans: a **blend of A (grim heroic) and B (dark stylized)**. It's implemented as `style: 'blend'` (Dark heroic).
+- Mechs: **Military frame** confirmed as the direction.
+- The legs on A and B weren't separated enough. Fixed with an A-frame, staggered stance and a narrow belt notch.
+
+## Round 5: minor tweaks ("we're almost there")
+Reference images are in the repo: `docs/ImageRefs/Humans/` (pixel Space Marines, a red-armoured greatsword warrior, a hooded wanderer, a lich, a red samurai, a paladin) and `docs/ImageRefs/Mecha/` (the six mech references from round 3).
+- **Mechs:** too symmetric in idle, especially from the side. One leg should be subtly in front of the other, with contrapposto, hip and torso counter-twist and asymmetric arms, to give them character.
+- **Humans:** too top-heavy. The legs are too skinny, the boots too big and the calves need more mass, like the Space Marine references.
+- **Plan:** the other units (remaining roles, archetypes and the modular line) get restyled, not retired, once the direction is locked.
