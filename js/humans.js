@@ -38,19 +38,19 @@
   const STYLES = {
     // A+B blend (the art director's pick): B's oversized hands, forearms, shoulders, V-taper and chunky weapons on
     // A's taller heroic frame (~4.5 heads), with A's angular armour and hidden faces; upright and confident.
-    blend: { label: 'Dark heroic (A+B)', head: 0.76, legs: 1.4, torso: 1.1, legW: 0.84, boot: 0.95, chestW: 1.28, chestD: 1.05, waist: 0.6, taper: 2.1, shX: 1.1,
-      U: 0.96, F: 0.94, aw: 1.0, fore: 1.5, fist: 1.38, pads: 1.05, ws: 1.2, blade: 0.95, headZ: 0.2, neck: 1.5,
+    blend: { label: 'Dark heroic (A+B)', head: 0.76, legs: 1.5, torso: 1.1, legW: 1.02, boot: 0.72, chestW: 1.13, chestD: 1.05, waist: 0.6, taper: 2.1, shX: 1.1,
+      U: 0.96, F: 0.94, aw: 1.0, fore: 1.3, fist: 1.2, pads: 0.92, ws: 1.2, blade: 0.95, headZ: 0.2, neck: 1.5,
       bob: 0.35, armSwing: 0.55, lift: 0.75, swing: 0.85, bevel: 0.4,
       H: { rogue: 46, soldier: 49, berserker: 57, sniper: 50, knight: 51, heavy: 53 } },
-    grim: { label: 'Grim heroic', head: 0.66, legs: 1.6, torso: 1.0, legW: 0.95, boot: 0.92, chestW: 1.08, chestD: 1.0, waist: 0.9, taper: 1.3, shX: 1.0,
-      U: 0.78, F: 0.76, aw: 0.95, fore: 1.1, fist: 0.9, pads: 0.95, ws: 1.12, blade: 1.0, headZ: 0.2, neck: 1.6,
+    grim: { label: 'Grim heroic', head: 0.66, legs: 1.6, torso: 1.0, legW: 1.08, boot: 0.72, chestW: 1.04, chestD: 1.0, waist: 0.9, taper: 1.3, shX: 1.0,
+      U: 0.78, F: 0.76, aw: 0.95, fore: 1.05, fist: 0.86, pads: 0.9, ws: 1.12, blade: 1.0, headZ: 0.2, neck: 1.6,
       bob: 0.35, armSwing: 0.55, lift: 0.75, swing: 0.85, bevel: 0.4,
       H: { rogue: 46, soldier: 50, berserker: 56, sniper: 50, knight: 52, heavy: 54 } },
-    dark: { label: 'Dark stylized', head: 0.9, legs: 0.95, torso: 1.2, legW: 0.8, boot: 1.0, chestW: 1.35, chestD: 1.1, waist: 0.58, taper: 2.2, shX: 1.12,
-      U: 1.12, F: 1.1, aw: 1.05, fore: 1.55, fist: 1.45, pads: 1.0, ws: 1.18, blade: 0.95, headZ: 0.2, neck: 1.4,
+    dark: { label: 'Dark stylized', head: 0.9, legs: 1.05, torso: 1.2, legW: 0.98, boot: 0.78, chestW: 1.25, chestD: 1.1, waist: 0.58, taper: 2.2, shX: 1.12,
+      U: 1.12, F: 1.1, aw: 1.05, fore: 1.42, fist: 1.33, pads: 0.92, ws: 1.18, blade: 0.95, headZ: 0.2, neck: 1.4,
       bob: 0.45, armSwing: 0.6, lift: 0.8, swing: 0.85, bevel: 0.45,
       H: { rogue: 42, soldier: 46, berserker: 54, sniper: 46, knight: 48, heavy: 50 } },
-    real: { label: 'Gritty realistic', head: 0.68, legs: 1.45, torso: 1.0, legW: 0.8, boot: 0.8, chestW: 0.86, chestD: 0.92, waist: 0.85, taper: 1.1, shX: 0.9, bruteW: 0.85,
+    real: { label: 'Gritty realistic', head: 0.68, legs: 1.45, torso: 1.0, legW: 0.9, boot: 0.66, chestW: 0.86, chestD: 0.92, waist: 0.85, taper: 1.1, shX: 0.9, bruteW: 0.85,
       U: 0.8, F: 0.78, aw: 0.78, fore: 1.0, fist: 0.66, pads: 0.55, ws: 0.8, blade: 0.8, headZ: 0.2, neck: 1.8,
       bob: 0.3, armSwing: 0.5, lift: 0.7, swing: 0.8, bevel: 0.3,
       H: { rogue: 50, soldier: 54, berserker: 60, sniper: 54, knight: 55, heavy: 57 } },
@@ -225,19 +225,20 @@
     for (const s of [-1, 1]) {
       const sp = pelvis.child('splay' + s, [s * P.hipX, 0, 0], [0, 0, s * P.splay]);
       const hip = H.hips[s] = sp.child('hip' + s, [0, 0, 0], [a1, 0, 0]);
-      hip.cone('y', lw * 0.3, lw * 0.44, P.thigh + 1.6, { at: [s * 0.25, -P.thigh / 2 + 0.4, 0], mat: M.thigh, sides: 8, twist: PI / 8 }); // slim at the crotch
+      hip.cone('y', lw * 0.4, lw * 0.5, P.thigh + 1.6, { at: [s * 0.2, -P.thigh / 2 + 0.4, 0], mat: M.thigh, sides: 8, twist: PI / 8 }); // full thigh, tapering to the knee
       if (plate) hip.box(lw * 0.9, P.thigh * 0.55, lw * 0.5, { at: [0, -P.thigh * 0.55, lw * 0.3], mat: M.greave, cuts: [[1, 0, 1, lw * 0.2], [-1, 0, 1, lw * 0.2], [0, -1, 1, lw * 0.15]] }); // cuisse
       const knee = hip.child('knee' + s, [0, -P.thigh, 0], [a2, 0, 0]);
-      knee.cone('y', lw * 0.3, lw * 0.44, P.shin * 0.5, { at: [0, -P.shin * 0.28, -0.3], mat: M.shin, sides: 8, twist: PI / 8 }); // calf
-      knee.cone('y', lw * 0.24, lw * 0.3, P.shin * 0.56, { at: [0, -P.shin * 0.74, -0.1], mat: M.shin, sides: 8, twist: PI / 8 }); // to the ankle
-      if (M.knee) knee.box(lw * 0.78, lw * 0.72, lw * 0.5, { at: [0, 0.2, lw * 0.3], mat: M.knee, bevel: 0.3, cuts: [[0, 1, 1, lw * 0.22], [0, -1, 1, lw * 0.22], [1, 0, 1, lw * 0.2], [-1, 0, 1, lw * 0.2]] });
+      knee.cone('y', lw * 0.38, lw * 0.5, P.shin * 0.52, { at: [0, -P.shin * 0.3, -0.5], mat: M.shin, sides: 8, twist: PI / 8 }); // solid calf bulge
+      knee.cone('y', lw * 0.32, lw * 0.38, P.shin * 0.56, { at: [0, -P.shin * 0.74, -0.2], mat: M.shin, sides: 8, twist: PI / 8 }); // to the ankle
+      if (M.knee) knee.box(lw * 0.86, lw * 0.78, lw * 0.56, { at: [0, 0.2, lw * 0.32], mat: M.knee, bevel: 0.3, cuts: [[0, 1, 1, lw * 0.22], [0, -1, 1, lw * 0.22], [1, 0, 1, lw * 0.2], [-1, 0, 1, lw * 0.2]] });
       if (brute && plate) knee.cone('z', lw * 0.16, 0.2, lw * 0.5, { at: [0, 0.3, lw * 0.72], mat: M.knee, sides: 4 }); // knee spike
       if (plate) knee.box(lw * 0.72, P.shin * 0.66, lw * 0.36, { at: [0, -P.shin * 0.5, lw * 0.26], mat: M.greave, cuts: [[1, 0, 1, lw * 0.18], [-1, 0, 1, lw * 0.18]] }); // greave
       else knee.box(lw * 0.64, 1.2, lw * 0.64, { at: [0, -P.shin * 0.62, 0], mat: M.wrap });
       const ankle = knee.child('ankle' + s, [0, -P.shin, 0], [-(a1 + a2), 0, 0]);
       const bz = bl * 0.16, toe = [0, s * 0.16, 0]; // toes turned slightly out; yaw keeps the sole flat on y = 0
-      ankle.box(bw * 0.86, bh, bl, { at: [0, -P.aY + bh / 2, bz], rot: toe, mat: M.boot, bevel: 0.4, bevelSet: 'top', cuts: [[0, 1, 1, bh * 0.6], [1, 0, 1, bw * 0.25], [-1, 0, 1, bw * 0.25]] });
-      ankle.box(bw * 0.72, bh * 0.7, bw * 0.8, { at: [0, -P.aY + bh + bh * 0.2, -0.3], rot: toe, mat: plate ? M.boot : M.wrap, bevel: 0.3 });
+      const fw = Math.max(bw * 0.86, lw * 0.82); // boot in proportion with the calf, never narrower than the ankle
+      ankle.box(fw, bh, bl, { at: [0, -P.aY + bh / 2, bz], rot: toe, mat: M.boot, bevel: 0.4, bevelSet: 'top', cuts: [[0, 1, 1, bh * 0.6], [1, 0, 1, bw * 0.25], [-1, 0, 1, bw * 0.25]] });
+      ankle.box(Math.max(bw * 0.72, lw * 0.8), bh * 0.7, Math.max(bw * 0.8, lw * 0.8), { at: [0, -P.aY + bh + bh * 0.2, -0.3], rot: toe, mat: plate ? M.boot : M.wrap, bevel: 0.3 });
       if (plate) ankle.box(bw * 0.7, 1, bl * 0.5, { at: [0, -P.aY + bh + 0.2, bz + bl * 0.2], rot: [0.35, s * 0.16, 0], mat: M.boot, cuts: [[1, 0, 1, 0.8], [-1, 0, 1, 0.8]] }); // sabaton lame
     }
     const zA = (h) => -(P.thigh * Math.sin(h) + P.shin * Math.sin(h + a2));
@@ -1212,9 +1213,9 @@
   function styledRole(b, S, role) {
     const P = Object.assign({}, b);
     P.head = b.head * S.head; P.headDrop = b.headDrop * S.head - S.neck; P.headZ = b.headZ * S.headZ;
-    P.thigh = b.thigh * S.legs; P.shin = b.shin * S.legs; P.legW = b.legW * S.legW;
-    P.hipX = Math.max(b.hipX * S.legW, P.legW * 0.46 + 1.8); // wide hip joints: a clear gap between the thighs
-    P.boot = b.boot.map((v) => v * S.boot); P.aY = b.aY * Math.max(0.85, S.boot);
+    P.thigh = b.thigh * S.legs; P.shin = b.shin * S.legs; P.legW = b.legW * S.legW * (b.body === 'lean' ? 1.15 : 1);
+    P.hipX = Math.max(b.hipX * S.legW, P.legW * 0.53 + 1.9); // wide hip joints: a clear gap between the thighs
+    P.boot = b.boot.map((v) => v * S.boot); P.aY = b.aY * Math.max(0.8, S.boot);
     const bw0 = b.body === 'brute' ? S.bruteW || 1 : 1;
     P.chest = [b.chest[0] * S.chestW * bw0, b.chest[1] * S.torso, b.chest[2] * S.chestD * bw0];
     P.shX = b.shX * S.chestW * S.shX * bw0; P.U = b.U * S.U; P.F = b.F * S.F; P.aw = b.aw * S.aw; P.fist = b.fist * S.fist;
