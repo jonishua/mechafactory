@@ -41,7 +41,7 @@ Implemented as `sdStyle: 'frame'` in `js/sdmechs.js` (the "Mech frame" line). It
 - Death, hit reactions and run cycles are a later animation pass.
 
 ## Roll-out order
-1. Fix the human walk cycle (in progress).
+1. Fix the human walk cycle (done: foot-path IK walk, stance blends out, no splay or wobble).
 2. Apply the locked rules to the remaining human roles: sniper, knight, heavy.
 3. Apply Military frame to all mech archetypes.
 4. Restyle the Modular line to the frame rules. It is not being retired.

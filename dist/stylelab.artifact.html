@@ -3242,7 +3242,28 @@ h1 { margin: 10px 0 8px; font: 700 clamp(28px, 4vw, 40px)/1.1 var(--f-display); 
     }
     const zA = (h) => -(P.thigh * Math.sin(h) + P.shin * Math.sin(h + a2));
     ctx.stride = 2 * (zA(a1 - P.swing) - zA(a1 + P.swing));
+    // walk (foot-path IK): the stance foot is planted and travels exactly half a stride under the hip; the hip
+    // height H0 is the highest that still reaches the foot at every stance key once the 2-per-stride bob is added
+    // [bob half-amplitude, swing-foot lift]: rogue light and quick, troopers solid, the berserker heavy and deliberate
+    const W = { rogue: [0.45, 3.2], sniper: [0.5, 2.8], berserker: [0.75, 2.3], soldier: [0.55, 2.5], knight: [0.55, 2.5], heavy: [0.7, 2.4] }[H.role] || [0.55, 2.5];
+    P.walkBob = W[0]; P.walkLift = W[1]; P.stride = ctx.stride;
+    const Lmax = (P.thigh + P.shin) * 0.985;
+    let H0 = 1e9;
+    for (let i = 0; i <= 16; i++) {
+      const p = (i / 16) * PI, z = P.stride / 4 - (P.stride / 2) * (p / PI);
+      H0 = Math.min(H0, Math.sqrt(Math.max(0, Lmax * Lmax - z * z)) - walkBob(P, p));
+    }
+    P.walkH0 = H0;
     return pelvis;
+  }
+  // body height offset during the walk: lowest just after contact (down), highest after passing (up)
+  const walkBob = (P, p) => -P.walkBob * Math.cos(2 * (p - PI / 4));
+  // planar 2-bone leg IK in the hip's sagittal plane: foot at (z forward, dy below the hip) -> hip pitch, knee bend
+  function legIK(P, z, dy) {
+    const T = P.thigh, S = P.shin, D = Math.min(Math.hypot(z, dy), (T + S) * 0.999);
+    const kn = Math.acos(clamp((D * D - T * T - S * S) / (2 * T * S), -1, 1));
+    const h = Math.atan2(-z, dy) - Math.atan2(S * Math.sin(kn), T + S * Math.cos(kn));
+    return [h, kn];
   }
 
   function buildLegs(ctx, H) {
@@ -3771,11 +3792,12 @@ h1 { margin: 10px 0 8px; font: 700 clamp(28px, 4vw, 40px)/1.1 var(--f-display); 
   function lowCarry(H, s, st, f, p, rot, n, mzn) {
     const P = H.P, u = 1 - f;
     const up = f > 0 ? ease(seg(u, 0, 0.1)) * (1 - ease(seg(u, 0.86, 1))) : 0;
-    const carry = [s * P.chest[0] * 0.26, -P.chest[1] * 0.06 + Math.sin(st.phase * 2) * 0.3 * Math.min(1, st.move), P.chest[2] * 0.5 + 1.2];
+    const mv = Math.min(1, st.move);
+    const carry = [s * P.chest[0] * 0.26, -P.chest[1] * 0.06 + 1.5 * mv + Math.sin(st.phase * 2) * 0.3 * mv, P.chest[2] * 0.5 + 1.2];
     const cy = Math.cos(rot[1]), cx = Math.cos(rot[0]);
     const dAim = [Math.sin(rot[1]) * cx, -Math.sin(rot[0]), cy * cx];
     if (n[mzn] && up < 0.85) n[mzn].hidden = true;
-    return { p: mix3(carry, p, up), rot: aim(mix3([-s * 0.55, -0.55, 0.62], dAim, up), 0) };
+    return { p: mix3(carry, p, up), rot: aim(mix3([-s * 0.55, -0.55 + 0.15 * mv, 0.62], dAim, up), 0) };
   }
 
   const GREATSWORD_REST = 'shoulder'; // 'shoulder' | 'back' | 'low'
@@ -4374,47 +4396,68 @@ h1 { margin: 10px 0 8px; font: 700 clamp(28px, 4vw, 40px)/1.1 var(--f-display); 
     const [a1, a2] = P.crouch;
     const u = 1 - fire;
     const act = fire > 0 ? ease(seg(u, 0, 0.15)) * (1 - ease(seg(u, 0.8, 1))) : 0;
-    const cp = idle * (1 - act) * P.contra, rs = H.relax;
-    const c = fx.crouch + P.walkCrouch * m1;
-    const sp = P.splay || 0;
+    // w: walk blend. The idle stance (A-frame splay, stagger, contrapposto, hip drop, knee ease) is fully gone by
+    // move 0.5, so the walk runs from a neutral straight-legged base; it blends back in when stopping.
+    const w = ease(seg(m, 0, 0.5)), run = clamp(m - 1, 0, 0.3) / 0.3;
+    const cp = (1 - w) * (1 - act) * P.contra, rs = H.relax;
+    const sp = (P.splay || 0) * (1 - w);
+    const c = fx.crouch;
+    // walk: stance foot planted, sliding back exactly half a stride under the hip; swing foot arcs forward and up
+    const Ls = P.stride, pL = (((ph - PI / 2) % (2 * PI)) + 2 * PI) % (2 * PI);
+    const hipW = P.aY + P.walkH0 + walkBob(P, pL % PI) * (1 + 0.3 * run) - c * 6;
+    const yaw = Math.cos(pL) * 0.07 * w; // slight pelvis yaw into the stride
     const L = {};
     for (const s of [-1, 1]) {
-      const p = s < 0 ? ph : ph + PI;
-      let dh = -P.swing * Math.sin(p) * m;
-      let dk = Math.max(0, Math.cos(p)) * P.lift * m;
-      let kb = a2, hy = 0;
-      // staggered contrapposto: the relaxed leg steps forward with the knee eased and turned out, the stance leg
-      // sits a little back
+      // idle pose (neutral when not in contrapposto)
+      let dh = 0, dk = 0, kb = a2, hy = 0;
       if (s === rs) { dk += 0.42 * cp; dh -= 0.2 * cp; hy = s * 0.35 * cp; } else { kb = a2 * (1 - 0.5 * cp); dh += 0.12 * cp; }
-      const h = a1 + dh - c, kn = kb + dk + 2 * c;
+      let h = a1 + dh - c, kn = kb + dk + 2 * c, toe = 0;
+      if (w > 0) { // leg phase: 0..PI stance (contact -> toe-off), PI..2PI swing
+        const p = (pL + (s < 0 ? 0 : PI)) % (2 * PI);
+        let z, lift = 0;
+        if (p < PI) z = Ls / 4 - (Ls / 2) * (p / PI);
+        else {
+          const q = (p - PI) / PI;
+          z = -Ls / 4 + (Ls / 2) * (1 - Math.cos(PI * q)) / 2;
+          lift = P.walkLift * (1 + 0.4 * run) * Math.sin(PI * Math.pow(q, 0.85));
+          toe = 0.3 * Math.sin(PI * q);
+        }
+        // the yawed pelvis moves the hip joint forward/back; aim from the hip, and counter-yaw the leg so the
+        // planted foot stays still and points straight ahead
+        const [hw, kw] = legIK(P, z + s * P.hipX * Math.sin(yaw), hipW - P.aY - lift);
+        h = lerp(h, hw, w); kn = lerp(kn, kw, w); hy = hy * (1 - w) - yaw; toe *= w;
+      }
       const hip = n['hip' + s].rot; hip[0] = h; hip[1] = hy;
       n['knee' + s].rot[0] = kn;
-      // ankle in the pelvis frame: hip pitch/knee, hip yaw, then the A-frame splay about the hip joint
+      n['splay' + s].rot[2] = s * sp;
+      // ankle in the pelvis frame: hip pitch/knee, hip yaw, then the (fading) A-frame splay about the hip joint
       const y0 = -P.thigh * Math.cos(h) - P.shin * Math.cos(h + kn), z0 = -P.thigh * Math.sin(h) - P.shin * Math.sin(h + kn);
       const x1 = z0 * Math.sin(hy), cs = Math.cos(s * sp), ss = Math.sin(s * sp);
-      L[s] = { x: s * P.hipX + x1 * cs - y0 * ss, y: x1 * ss + y0 * cs, h, kn, hy, toe: dk * 0.3 * m1 };
+      L[s] = { x: s * P.hipX + x1 * cs - y0 * ss, y: x1 * ss + y0 * cs, h, kn, hy, toe };
     }
-    // pelvis tilt: at rest exactly the angle that puts both soles on the ground; while walking, a stride sway
+    // pelvis tilt: at rest exactly the angle that puts both soles on the ground; walking, a small hip drop on the
+    // swing side
     const st0 = -rs;
     const dX = L[st0].x - L[rs].x, dY = L[st0].y - L[rs].y;
-    const roll = (cp > 0 ? Math.atan(-dY / dX) : 0) + Math.sin(ph) * P.sway * m1;
+    const roll = (cp > 0 ? Math.atan(-dY / dX) * (1 - w) : 0) - Math.sin(pL) * 0.02 * w;
     let top = -1e9;
     const Rr = eulerM([0, 0, roll]);
     for (const s of [-1, 1]) {
       const l = L[s];
       top = Math.max(top, -(l.x * Math.sin(roll) + l.y * Math.cos(roll)));
-      // ankle: undo the whole chain so the sole stays flat, then turn the foot with the knee (and toe-off pitch)
+      // ankle: undo the whole chain so the sole stays flat, then turn the foot with the knee (and swing toe pitch)
       const chain = mul(mul(mul(Rr, eulerM([0, 0, s * sp])), eulerM([0, l.hy, 0])), eulerM([l.h + l.kn, 0, 0]));
-      const e = toEuler(mulT(chain, eulerM([l.toe, l.hy, 0])));
+      const e = toEuler(mulT(chain, eulerM([l.toe, l.hy + yaw, 0])));
       const a = n['ankle' + s].rot; a[0] = e[0]; a[1] = e[1]; a[2] = e[2];
     }
     n.pelvis.pos[1] = (P.aY + top) * k;
-    n.pelvis.rot[1] = Math.sin(ph) * 0.08 * m1;
+    // slight pelvis yaw into the stride, shoulders counter-rotating; small shoulder roll; head kept level
+    n.pelvis.rot[1] = yaw;
     n.pelvis.rot[2] = roll;
     const ch = n.chest;
-    ch.rot[0] = P.lean + fx.lean + P.walkLean * m1 + breath * 0.012 * idle;
-    ch.rot[1] = -n.pelvis.rot[1] * 1.2 + fx.twist + rs * 0.06 * cp;
-    ch.rot[2] = -roll * 1.7 + Math.sin(ph) * P.shRoll * m1;
+    ch.rot[0] = P.lean + fx.lean + P.walkLean * w * (1 + run) + breath * 0.012 * idle;
+    ch.rot[1] = -n.pelvis.rot[1] * 1.6 + fx.twist + rs * 0.06 * cp;
+    ch.rot[2] = -roll * (1.7 * (1 - w) + 0.6 * w);
     if (n.head) {
       n.head.rot[0] = -(P.lean + fx.lean + P.walkLean * m1) * 0.9 + fx.headPitch + breath * 0.01 * idle;
       n.head.rot[1] = -fx.twist * 0.5 - ch.rot[1] * 0.4;
