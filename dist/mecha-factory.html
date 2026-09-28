@@ -4119,10 +4119,12 @@ input[type=range] { width: 100%; accent-color: var(--amber); }
     } else if (type === 'backpack') {
       const bk = chest.child('pack', [0, Ht * 0.55, -D / 2]);
       if (sci) {
-        bk.box(W * 0.78, Ht * 0.85, 5, { at: [0, 0, -2.4], mat: 'primary', bevel: 1.2, detail: [{ type: 'vent', face: '-z', pitch: 2, inset: 2 }, { type: 'bolts', face: '-z', inset: 1.2 }] });
+        // styled looks: a slimmer, lower pack so the silhouette isn't top-heavy from the side
+        const pk = H.sd ? 1 : 0.72;
+        bk.box(W * 0.78 * pk, Ht * 0.85 * pk, 5 * pk, { at: [0, H.sd ? 0 : -Ht * 0.08, -2.4 * pk], mat: 'primary', bevel: 1.2 * pk, detail: [{ type: 'vent', face: '-z', pitch: 2, inset: 2 * pk }, { type: 'bolts', face: '-z', inset: 1.2 }] });
         for (const s of [-1, 1]) {
-          bk.cyl('y', 1.9, 7, { at: [s * W * 0.26, Ht * 0.5, -3.2], mat: 'metal', sides: 8 });
-          bk.cyl('y', 1.2, 0.8, { at: [s * W * 0.26, Ht * 0.5 + 3.8, -3.2], mat: 'accent', sides: 8, shadow: false });
+          bk.cyl('y', 1.9 * pk, 7 * pk, { at: [s * W * 0.26 * pk, Ht * 0.5 * pk, -3.2 * pk], mat: 'metal', sides: 8 });
+          bk.cyl('y', 1.2 * pk, 0.8, { at: [s * W * 0.26 * pk, Ht * 0.5 * pk + 3.8 * pk, -3.2 * pk], mat: 'accent', sides: 8, shadow: false });
         }
       } else {
         bk.box(W * 0.7, Ht * 0.75, 4.5, { at: [0, -0.5, -2.2], mat: 'leather', bevel: 1.2, detail: { type: 'band', face: '-z', dir: 'v', at: 0, size: 0.7, mat2: 'metal' } });
@@ -4629,6 +4631,13 @@ input[type=range] { width: 100%; accent-color: var(--amber); }
     P.chest = [b.chest[0] * S.chestW * bw0, b.chest[1] * S.torso, b.chest[2] * S.chestD * bw0];
     P.shX = b.shX * S.chestW * S.shX * bw0; P.U = b.U * S.U; P.F = b.F * S.F; P.aw = b.aw * S.aw; P.fist = b.fist * S.fist;
     P.padScale = b.padScale * S.pads * (b.body === 'brute' ? 0.85 : 1); P.ws = b.ws * S.ws;
+    // armoured troopers (soldier, knight, heavy) were top-heavy: power-armour legs like the Space Marine refs,
+    // a bit more of the height in the legs, and smaller pauldrons. The hips widen so the leg gap survives.
+    if (b.body === 'armored') {
+      P.legW *= 1.6; P.hipX = Math.max(P.hipX * 1.35, P.legW * 0.55 + 2);
+      P.thigh *= 1.14; P.shin *= 1.14; P.chest = [P.chest[0] * 0.94, P.chest[1] * 0.88, P.chest[2]];
+      P.padScale *= 0.8; P.shX *= 0.94;
+    }
     // upright and confident: vertical spine (a touch proud), slight knee bend only
     P.lean = role === 'rogue' || role === 'sniper' ? 0.04 : -0.03; P.walkLean = 0.05; P.crouch = [-0.08, 0.17]; P.contra = 1;
     P.swing = b.swing * S.swing; P.lift = b.lift * S.lift; P.armSwing = b.armSwing * S.armSwing; P.walkCrouch = 0.03;
