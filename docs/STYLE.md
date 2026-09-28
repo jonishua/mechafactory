@@ -1,6 +1,6 @@
-# Style sheet (draft, round 4)
+# Style sheet (LOCKED)
 
-This records the direction the art director picked in the Style Lab. It's a draft until they sign off. The history and the reference descriptions are in `STYLE-REFS.md`.
+The art director locked this direction after round 6 of the Style Lab. Every new or restyled unit follows these rules. The history is in `STYLE-REFS.md`, and the reference images are in `ImageRefs/`.
 
 ## Humans: "Dark heroic" (A grim heroic × B dark stylized)
 
@@ -34,6 +34,14 @@ Implemented as `sdStyle: 'frame'` in `js/sdmechs.js` (the "Mech frame" line). It
 | Height at size 1 | ≈85–100 px. Use 128 px cells. |
 | Palette | Sand Frame, Field Olive, Navy Anchor, Bone White and Titans Navy for military units. Costume mechs like the Corsair get vivid signature colours. |
 
-## Still open
-- Sign-off on the blend and the frame direction, then roll the rules out to the remaining human roles (sniper, knight, heavy) and all mech archetypes.
-- The modular line gets restyled to the frame rules (not retired) once the direction is locked.
+## Animation rules
+- **Idle:** the stance described above, plus subtle breathing and a slow weight shift.
+- **Walk:** a real walk, not a waddle. Legs travel straight under the hips with no A-frame splay or sideways swing. Heel strike, passing pose and push-off, with the knee lifting forward. Minimal side-to-side sway and hip roll, arms counter-swinging, and a stable torso and head. The idle stance blends out as the walk starts.
+- **Attack:** the weapon comes up from the relaxed carry, strikes or fires, and returns.
+- Death, hit reactions and run cycles are a later animation pass.
+
+## Roll-out order
+1. Fix the human walk cycle (in progress).
+2. Apply the locked rules to the remaining human roles: sniper, knight, heavy.
+3. Apply Military frame to all mech archetypes.
+4. Restyle the Modular line to the frame rules. It is not being retired.

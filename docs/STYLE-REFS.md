@@ -54,3 +54,7 @@ Reference images are in the repo: `docs/ImageRefs/Humans/` (pixel Space Marines,
 - **Mechs:** too symmetric in idle, especially from the side. One leg should be subtly in front of the other, with contrapposto, hip and torso counter-twist and asymmetric arms, to give them character.
 - **Humans:** too top-heavy. The legs are too skinny, the boots too big and the calves need more mass, like the Space Marine references.
 - **Plan:** the other units (remaining roles, archetypes and the modular line) get restyled, not retired, once the direction is locked.
+
+## Round 6: lock
+- The armoured soldier was still top-heavy. Fixed with power-armour legs (+60%), more of the height in the legs, smaller pauldrons and a lower pack.
+- **Style LOCKED.** Next: the human walk reads as wobbly and bow-legged. Fix it before the roll-out. Deeper animation work comes later.
